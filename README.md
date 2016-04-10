@@ -1,4 +1,6 @@
 ## Cloudera Distribution Including Apache Hadoop auto deployment by different CM
+  
+---
 
 <img src="imgs/cloudera-logo-01.png"/>
 
