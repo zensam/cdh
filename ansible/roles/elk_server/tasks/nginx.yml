@@ -1,0 +1,14 @@
+- name: Install nginx from repository
+  yum: name={{ item }} state=latest
+  with_items:
+   - nginx
+
+- name: Copy nginx default.conf from template
+  template: src=default.conf dest=/etc/nginx/conf.d/default.conf
+
+- name: Copy index.html
+  template: src=index.html dest=/usr/share/nginx/html/index.html
+
+- name: Ensure nginx is started and enabled to start at boot.
+  service: name=nginx state=started enabled=yes
+

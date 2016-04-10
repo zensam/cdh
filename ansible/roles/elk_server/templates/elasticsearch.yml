@@ -1,0 +1,7 @@
+  node.name: elk
+  node.master: true
+  node.data: true
+  transport.tcp.port: 9300
+  transport.tcp.compress: true
+  http.port: 9200
+  http.cors.enabled: true

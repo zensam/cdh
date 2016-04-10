@@ -1,0 +1,9 @@
+[alias]
+    st = status
+    ci = commit
+    co = checkout
+    br = branch
+[color]
+    ui = auto
+[push]
+    default = matching

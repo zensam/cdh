@@ -1,0 +1,22 @@
+---
+- name: Install common packages
+  hosts: all
+  sudo: yes
+  roles:
+    - common-packages-centos
+    - common
+    - entropy
+
+- name: Install ELK
+  hosts: all
+  sudo: yes
+  roles:
+    - elk_server
+
+- name: Install client code
+  hosts: all
+  sudo: yes
+  roles:
+    - consul
+    - elk_client
+    - ssh-keys

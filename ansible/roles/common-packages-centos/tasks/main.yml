@@ -1,0 +1,13 @@
+---
+- name: Install EPEL
+  yum: name=epel-release state=latest
+  async: 600
+  poll: 10
+
+- name: Install core packages
+  yum: name=bind-utils,bzip2,curl,expect,krb5-libs,krb5-workstation,lsof,net-tools,nmap,ntp,openldap-clients,openssh-server,openssh-clients,psmisc,python-pip,python-setuptools,sudo,sysstat,tmux,tar,unzip,vim-common,wget,e2fsprogs,libstdc++,vim,libselinux-python,git state=latest
+  async: 600
+  poll: 10
+
+# Disable packages for Amazon Linux
+# - supervisor

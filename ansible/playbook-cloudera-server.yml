@@ -1,0 +1,12 @@
+---
+- name: Execute cloudera server specific tasks
+  hosts: all
+  sudo: yes
+  roles:
+    - cloudera-server
+
+- name: Install CloudWatch client
+  hosts: all
+  sudo: yes
+  roles:
+    - cloudwatch

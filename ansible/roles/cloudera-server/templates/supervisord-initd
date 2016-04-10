@@ -1,0 +1,67 @@
+#!/bin/bash
+# description: Auto-starts supervisord
+# processname: supervisord
+# pidfile: /var/run/supervisord.pid
+
+#
+# supervisord: Starts the supervisor daemon
+#
+# chkconfig: - 75 25
+# description: supervisor daemon
+# processname: supervisord
+# pidfile: /var/run/supervisord.pid
+#
+# source function library
+. /etc/init.d/functions
+
+SUPERVISORD=/usr/local/bin/supervisord
+SUPERVISORCTL=/usr/local/bin/supervisorctl
+SUPERVISORCONF=/etc/supervisor/supervisord.conf
+SUPERVISORLOGDIR=/var/log/supervisor
+
+RETVAL=0
+prog="supervisord"
+LOCKFILE=/var/lock/subsys/$prog
+
+test -x ${SUPERVISORD} || { echo "Cannot find supervisord executable ${SUPERVISORD}" 1>&2 ; exit 5 ; }
+
+case "$1" in
+start)
+  echo -n $"Starting $prog: "
+  mkdir -p "$SUPERVISORLOGDIR"
+  ${SUPERVISORD} -c $SUPERVISORCONF && success || failure
+  RETVAL=$?
+  [ "$RETVAL" = 0 ] && touch ${LOCKFILE}
+  echo
+  ;;
+
+stop)
+  echo -n $"Stopping $prog: "
+  if [ -e /var/run/$prog.pid ]; then
+    kill `cat /var/run/$prog.pid` && success || failure
+    #$SUPERVISORCTL shutdown
+  else
+    failure
+  fi
+  RETVAL=$?
+  [ "$RETVAL" = 0 ] && rm -f ${LOCKFILE}
+  echo
+  ;;
+
+restart|reload)
+  $0 stop
+  $0 start
+  ;;
+
+condrestart)
+  [ -f $LOCKFILE ] && $0 restart
+  ;;
+
+status)
+  status $prog
+  RETVAL=$?
+  ;;
+*)
+  echo $"Usage: $prog {start|stop|status|reload|restart|condrestart}"
+esac
+exit $RETVAL

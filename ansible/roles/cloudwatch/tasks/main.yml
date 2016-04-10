@@ -1,0 +1,38 @@
+---
+- name: Check for /usr/local/bin/aws
+  stat: path=/usr/local/bin/aws
+  register: aws_bin
+
+- name: Delete AWS CLI files
+  file: path={{ item }} state=absent
+  with_items:
+    - /usr/local/aws
+    - /tmp/awscli-bundle.zip
+    - /tmp/awscli-bundle
+  when: not aws_bin.stat.exists
+
+- name: Download AWS CLI code
+  get_url: url=https://s3.amazonaws.com/aws-cli/awscli-bundle.zip dest=/tmp/awscli-bundle.zip
+  when: not aws_bin.stat.exists
+
+- name: Extract AWS CLI code
+  unarchive: src=/tmp/awscli-bundle.zip dest=/tmp copy=no
+  when: not aws_bin.stat.exists
+
+- name: Install AWS CLI
+  shell: /tmp/awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
+  when: not aws_bin.stat.exists
+
+- name: Create directory for AWS CLI configs
+  file: path=/root/.aws state=directory mode=0700 owner=root
+
+- name: Create config for AWS CLI
+  template: src=aws-config dest=/root/.aws/config owner=root group=root mode=0600
+
+- name: Create credentials for AWS CLI
+  template: src=aws-credentials dest=/root/.aws/credentials owner=root group=root mode=0600
+
+- name: Add CloudWatch to cron
+  cron: name="cloudwatch" minute="*"
+        user="root" job="/opt/cd-cloudbreak/Cloudera/timeseries.sh &>> /var/log/cd-cloudbreak-timeseries.log"
+        cron_file=ansible_cloudwatch

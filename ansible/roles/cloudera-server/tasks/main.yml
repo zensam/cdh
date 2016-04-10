@@ -1,0 +1,37 @@
+---
+- name: Install Selenium
+  pip: name=selenium
+
+- name: Install Supervisor
+  pip: name=supervisor
+
+- name: Create directories for supervisor
+  file: path={{ item }} state=directory recurse=yes
+  with_items:
+    - "/etc/supervisor/conf.d"
+    - "/var/log/supervisor"
+
+- name: Deploy supervisord.conf
+  template: src=supervisord.conf dest=/etc/supervisor/supervisord.conf owner=root group=root mode=0644
+
+- name: Create link to supervisord.conf for supervisorctl
+  file: src=/etc/supervisor/supervisord.conf dest=/usr/local/etc/supervisord.conf state=link
+
+- name: Deploy supervisord init.d script
+  template: src=supervisord-initd dest=/etc/init.d/supervisord owner=root group=root mode=0755
+
+- name: Deploy phantomjs conf
+  template: src=supervisord-phantomjs.conf dest=/etc/supervisor/conf.d/phantomjs.conf owner=root group=root mode=0644
+
+- name: Download phantomjs
+  get_url: url={{ phantom_js_url }} dest={{ phantom_js_file }} sha256sum={{ phantom_js_sha256sum }}
+
+- name: Extract phantomjs
+  shell: if [ ! -d {{ phantom_js_dir }} ]; then tar --directory=/opt -jxf {{ phantom_js_file }} && ln -s {{ phantom_js_dir }}/bin/phantomjs /usr/bin; fi
+
+- name: Enable supervisord service
+  service: name=supervisord state=stopped enabled=yes
+
+- name: Copy ldap_external_auth.sql to /root
+  template: src=ldap_external_auth.sql dest=/root/ldap_external_auth.sql owner=root group=root mode=0644
+

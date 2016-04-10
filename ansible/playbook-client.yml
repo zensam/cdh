@@ -1,0 +1,8 @@
+---
+- name: Install Consul and log forwarder
+  hosts: all
+  sudo: yes
+  roles:
+    # - consul
+    # - elk_client
+    - ssh-keys

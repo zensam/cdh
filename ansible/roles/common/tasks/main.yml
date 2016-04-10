@@ -1,0 +1,123 @@
+---
+# - name: Deploy resolv.conf
+#   template: src=resolv.conf dest=/etc/resolv.conf owner=root group=root mode=0644
+
+- name: Set vm.swappiness to 0 in /etc/sysctl.conf
+  sysctl: name=vm.swappiness value=0 state=present reload=yes ignoreerrors=yes
+  ignore_errors: yes
+
+- name: Set net.ipv4.ip_forward to 1 in /etc/sysctl.conf for VPN
+  sysctl: name=net.ipv4.ip_forward value=1 state=present reload=yes ignoreerrors=yes
+  ignore_errors: yes
+
+- name: Disable IPv6 (net.ipv6.conf.all.disable_ipv6=1)
+  sysctl: name=net.ipv6.conf.all.disable_ipv6 value=1 state=present reload=yes ignoreerrors=yes
+
+- name: Disable IPv6 (net.ipv6.conf.default.disable_ipv6=1)
+  sysctl: name=net.ipv6.conf.default.disable_ipv6 value=1 state=present reload=yes ignoreerrors=yes
+
+- name: Create sudoers temporary file
+  command: cp -f /etc/sudoers /etc/sudoers.tmp
+
+- name: Create sudoers file backup
+  command: cp -f /etc/sudoers /etc/sudoers.bak
+
+- name: Disable requiretty
+  replace: dest=/etc/sudoers.tmp regexp='^Defaults.*requiretty$' replace='#Defaults requiretty' validate='visudo -q -c -f %s'
+
+- name: make sure we can sudo as sudo group without password
+  lineinfile: dest=/etc/sudoers.tmp state=present regexp='^%sudo' line='%sudo ALL=(ALL) NOPASSWD:ALL'
+
+- name: also make sure ssh-agent works via sudo
+  lineinfile: dest=/etc/sudoers.tmp state=present regexp='^Defaults env_keep\+\=SSH_AUTH_SOCK' line='Defaults env_keep+=SSH_AUTH_SOCK'
+
+- name: Final sudoers file check
+  shell: visudo -q -c -f /etc/sudoers.tmp && cp -f /etc/sudoers.tmp /etc/sudoers
+
+- name: Disable empty password login
+  lineinfile: dest={{ sshd_config }} regexp="^#?PermitEmptyPasswords" line="PermitEmptyPasswords no"
+  notify: restart sshd
+
+- name: Enable remote root login
+  lineinfile: dest={{ sshd_config }} regexp="^#?PermitRootLogin" line="PermitRootLogin yes"
+  notify: restart sshd
+
+- name: Enable password login
+  lineinfile: dest={{ sshd_config }} regexp="^#?PasswordAuthentication" line="PasswordAuthentication yes"
+  notify: restart sshd
+
+- name: Disable DNS lookup
+  lineinfile: dest={{ sshd_config }} regexp="^#?UseDNS" line="UseDNS no"
+  notify: restart sshd
+
+- name: Deploy .inputrc
+  template: src=inputrc dest=~/.inputrc
+
+- name: Deploy vimrc.local
+  template: src=vimrc dest=~/.vimrc
+
+- name: Deploy vimrc.local
+  template: src=vimrc dest=/etc/vim/vimrc.local
+  when: ansible_os_family == "Debian"
+
+- name: Setup UTC timezone - delete old file
+  file: path=/etc/localtime owner=root group=root state=absent
+  when: ansible_os_family == "RedHat"
+
+- name: Setup UTC timezone
+  file: src=/usr/share/zoneinfo/UTC dest=/etc/localtime owner=root group=root state=link
+  when: ansible_os_family == "RedHat"
+
+- name: Set UTC timezone
+  shell: if ! "Etc/UTC" grep /etc/timezone; then echo "Etc/UTC" > /etc/timezone; dpkg-reconfigure --frontend noninteractive tzdata; fi
+  when: ansible_os_family == "Debian"
+
+- name: Set time
+  shell: service {{ service_ntp }} status || ntpdate 0.centos.pool.ntp.org || ntpdate pool.ntp.org || true
+  ignore_errors: yes
+
+- name: Run ntpd
+  service: name={{ service_ntp }} state=running enabled=yes
+
+# DANGEROUS
+# - name: Setup hostname
+#   hostname: name={{ inventory_hostname }}.{{ domain }}
+
+# - name: Add hostname to /etc/hostname
+#   shell: echo "{{ inventory_hostname }}" > /etc/hostname
+
+# - name: Save instances IP addresses to /etc/hosts
+#   lineinfile: dest=/etc/hosts regexp="{{ inventory_hostname }}.{{ domain }}" line="{{ansible_default_ipv4.address}} {{ inventory_hostname }}.{{ domain }} {{ inventory_hostname }}" owner=root group=root mode=0644
+#   delegate_to: "{{ item }}"
+#   with_items: groups['all']
+
+# - name: Define host in /etc/mailname
+#   command: cp /etc/hostname /etc/mailname
+
+# - name: Define domain name in /etc/dhcp/dhclient.conf
+#   lineinfile: dest=/etc/dhcp/dhclient.conf regexp="supersede domain-name " line="supersede domain-name '{{ domain }}';" owner=root group=root mode=0644
+
+# - name: Define domain name in /etc/dhcp/dhclient.conf
+#   lineinfile: dest=/etc/dhcp/dhclient.conf regexp="supersede domain-name-servers" line="supersede domain-name-servers 8.8.4.4, 8.8.8.8;" owner=root group=root mode=0644
+
+- name: Set default editor
+  command: update-alternatives --set editor /usr/bin/vim.basic
+  when: ansible_os_family == "Debian"
+
+- name: Workaround - restart sshd
+  service: name={{ sshd }} state=restarted
+
+- name: Add authorized keys for user root for Cloudera installation
+  authorized_key: user=root key="{{ cloudera_ssh_public_key_root }}"
+
+- name: Disable SELinux in config file
+  selinux: state=disabled
+  ignore_errors: yes
+  when: ansible_os_family == "RedHat"
+
+# CentOS7: /sbin/setenforce
+# CentOS6: /usr/sbin/setenforce
+- name: Put SELinux to permissive mode
+  command: setenforce 0
+  ignore_errors: yes
+  when: ansible_os_family == "RedHat"

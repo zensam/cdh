@@ -1,0 +1,23 @@
+---
+sshd: sshd
+sshd_config: /etc/ssh/sshd_config
+service_ntp: ntpd
+
+haveged_url: http://dl.fedoraproject.org/pub/epel/6/x86_64/haveged-1.9.1-2.el6.x86_64.rpm
+
+scripts_dir: /opt/hadoop.git/ClouderaConfigurator/Scripts
+
+cloudera_ini_file: /opt/hadoop.git/ClouderaConfigurator/Scripts/clouderaconfig.ini
+
+hive_metastore_password: hivepass
+cdh_parcel_version: 5.3.2-1.cdh5.3.2.p0.10
+hive_url_prefix: http://archive.cloudera.com/cdh5/cdh/5
+hive_version: hive-0.13.1-cdh5.3.0
+hive_file_prefix: /tmp
+hive_extract_dir: /opt
+
+# These variables are defined in prereq role
+# hive_metastore_host_short: node1
+# cm_host_short: cloudera2
+
+domain: mycompany.com

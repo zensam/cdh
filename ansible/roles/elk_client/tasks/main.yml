@@ -1,0 +1,25 @@
+- name: Add Logstash repo key
+  rpm_key: key="http://packages.elasticsearch.org/GPG-KEY-elasticsearch" state=present
+
+- name: Enable Logstashforwarder repository
+  template: src=logstashforwarder_repo.j2 dest=/etc/yum.repos.d/logstashforwarder.repo
+
+- name: Install Logstash forwarder from repository
+  yum: name={{ item }} state=latest
+  with_items:
+   - logstash-forwarder
+
+- name: Create directories
+  file: path=/etc/logstash-forwarder/ssl state=directory mode=0755 recurse=yes
+
+- name: Copy ssl crt
+  template: src=lumberjack.crt dest=/etc/logstash-forwarder/ssl/lumberjack.crt owner=root group=root mode=0644
+
+- name: Remove file
+  file: path=/etc/logstash-forwarder.conf state=absent
+
+- name: Deploy logstash_forwarder config
+  template: src=logstash-forwarder.conf dest=/etc/logstash-forwarder.conf owner=root group=root mode=0644
+
+- name: Enable logstash-forwarder service
+  service: name=logstash-forwarder enabled=yes

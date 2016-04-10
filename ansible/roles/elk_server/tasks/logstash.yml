@@ -1,0 +1,37 @@
+- name: Add Logstash repo key
+  rpm_key: key="http://packages.elasticsearch.org/GPG-KEY-elasticsearch" state=present
+
+- name: Enable Elasticsearch repository
+  template: src=logstash_repo.j2 dest=/etc/yum.repos.d/logstash.repo
+
+- name: Install Logstash from repository
+  yum: name={{ item }} state=latest
+  with_items:
+   - logstash
+
+- name: Create directory
+  file: path=/etc/logstash/ssl state=directory mode=0755
+
+- name: Deploy logstash config
+  template: src=parser.conf dest=/etc/logstash/conf.d/parser.conf owner=root group=root mode=0755
+
+- name: Copy ssl crt
+  template: src=lumberjack.crt dest=/etc/logstash/ssl/lumberjack.crt owner=root group=root mode=0755
+
+- name: Copy ssl key
+  template: src=lumberjack.key dest=/etc/logstash/ssl/lumberjack.key owner=root group=root mode=0755
+
+- name : Download kibana
+  get_url: url=https://download.elastic.co/kibana/kibana/kibana-4.1.0-linux-x64.tar.gz dest=/usr/local/src/kibana.tar.gz
+
+- name: Unpack kibana and move to /usr/local
+  shell: cd /usr/local/src; tar xfpz kibana.tar.gz; mv kibana-4.1.0-linux-x64 kibana; mv kibana /opt ; rm -rf kibana.tar.gz
+
+- name: Init script for kibana start
+  template: src=init_kibana dest=/etc/init.d/kibana owner=root group=root mode=0755
+
+- name: Enable kibana service
+  service: name=kibana enabled=yes
+
+- name: Enable logstash service
+  service: name=logstash enabled=yes
