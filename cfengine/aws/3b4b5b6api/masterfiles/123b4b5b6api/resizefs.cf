@@ -1,0 +1,114 @@
+####################################################
+# /var/cfengine/masterfiles/123b4b5b6api/resizefs.cf
+####################################################
+#
+# root partition resizing (centos 6)
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "resizefs" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent resizefs
+{
+  vars:
+    centos_6::
+      "stat_reparted"  string => "$(sys.logdir)/rootdev.reparted";
+      "stat_rebooted"  string => "$(sys.logdir)/rootdev.rebooted";
+      "stat_resized"   string => "$(sys.logdir)/rootfs.resized";
+      "dev_root"       string => execresult("/bin/mount | /bin/grep 'on / ' | /bin/awk '{print $1}' | /bin/sed 's/[0-9]$//'","useshell");
+      "root_part"      string => execresult("/bin/mount | /bin/grep 'on / ' | /bin/awk '{print $1}'","useshell");
+      "rootpart_start" string => execresult("/sbin/fdisk -l -u $(resizefs.dev_root) | /bin/grep $(resizefs.root_part) | /bin/awk '{print $3}'","useshell");
+      # "rootpart_start" string => execresult("/sbin/sfdisk -l -uS $(resizefs.dev_root) | /bin/grep $(resizefs.root_part) | /bin/sed 's/*//' | /bin/awk '{print $2}'","useshell");
+      ### last "echo ''" in "fdiskcmd" to avoid error code 1 returning:
+      # "fdiskcmd"       string => "/bin/echo -e \"u\np\nd\nn\np\n1\n$(resizefs.rootpart_start)\n\na\n1\nw\n\" | /sbin/fdisk $(resizefs.dev_root) &> /dev/null";
+      "fdiskcmd"       string => "/bin/echo -e \"u\np\nd\nn\np\n1\n$(resizefs.rootpart_start)\n\na\n1\nw\n\" | /sbin/fdisk $(resizefs.dev_root) &> /dev/null || /bin/echo \'\'";
+###
+  classes:
+      # "dontrun" expression => fileexists("$(vc.yum_pid)");
+      "mayrun"  expression => isgreaterthan("$(sys.uptime)","2");
+###
+  methods:
+    centos_6::
+      "resize" usebundle => resize_root,
+      comment => "Resize root partition",
+      ifvarclass => and(fileexists("$(resizefs.stat_rebooted)"),not(fileexists("$(resizefs.stat_resized)")));
+
+    centos_6::
+      "rebootrep" usebundle => reboot_reparted,
+      comment => "Reboot repartitioned system",
+      ifvarclass => and(fileexists("$(resizefs.stat_reparted)"),not(fileexists("$(resizefs.stat_rebooted)")));
+
+    centos_6.mayrun::
+      "repart" usebundle => repart_root,
+      comment => "Root repartitioning",
+      ifvarclass => not(fileexists("$(resizefs.stat_reparted)"));
+###
+  reports:
+      "$(sys.date) $(sys.uqhost) $(this.bundle) root storage device is - $(resizefs.dev_root)";
+      # "$(sys.date) $(sys.uqhost) $(this.bundle) root storage partition is - $(resizefs.root_part)";
+      # "$(sys.date) $(sys.uqhost) $(this.bundle) root storage partition starts from $(resizefs.rootpart_start) ";
+
+}
+
+# Resize root_part if file stat_rebooted exists but stat_resized doesn't
+bundle agent resize_root
+{
+  commands:
+    centos_6::
+      "/sbin/resize2fs $(resizefs.root_part) && /bin/touch $(resizefs.stat_resized)"
+      contain => in_shell,
+      ifvarclass => not(fileexists("/var/run/yum.pid")),
+      classes => if_repaired("root_resized");
+
+  reports:
+    root_resized::
+      "$(sys.date) $(sys.uqhost) ~ Root filesystem is resized by $(this.bundle)";
+    !root_resized::
+      "$(sys.date) $(sys.uqhost) ~ Resizing is skipped by $(this.bundle)";
+}
+
+# Reboot system and add file stat_rebooted creation to the /etc/rc.local
+# if file stat_reparted exists but stat_rebooted and yum.pid doesn't
+bundle agent reboot_reparted
+{
+  vars:
+    centos_6::
+      "rclocal"  string => "/etc/rc.local";
+      "2rclocal" string => "if [ ! -f $(resizefs.stat_rebooted) ]; then /bin/touch $(resizefs.stat_rebooted); fi";
+
+  files:
+    centos_6::
+      "$(rclocal)"
+      create        => "false",
+      edit_defaults => no_backup,
+      classes       => if_repaired("rc_edited"),
+      edit_line     => append_if_no_lines($(2rclocal));
+
+  commands:
+    rc_edited::
+      "/sbin/shutdown -r 1"
+      # "/sbin/reboot"
+      # contain => in_shell,
+      ifvarclass => not(fileexists("/var/run/yum.pid")),
+      comment => "Reboot system if no yum.pid and rc.local was edited";
+
+  reports:
+      "$(sys.date) $(sys.uqhost) bundle $(this.bundle) was invoked";
+    rc_edited::
+      "$(sys.date) $(sys.uqhost) rc.local is edited by $(this.bundle)";
+    !rc_edited::
+      "$(sys.date) $(sys.uqhost) rc.local is skipped by $(this.bundle)";
+
+}
+
+# Repartition dev_root if file stat_reparted doesn't exist
+bundle agent repart_root
+{
+  commands:
+    centos_6::
+      "/bin/touch $(resizefs.stat_reparted) && $(resizefs.fdiskcmd)"
+       contain => in_shell;
+}

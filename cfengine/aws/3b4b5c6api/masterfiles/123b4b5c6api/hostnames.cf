@@ -1,0 +1,76 @@
+#################################################
+# /var/cfengine/masterfiles/123b4b5b/hostnames.cf
+#################################################
+#
+# To override aws dhcp hostname changing (centos 7)
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "hostnames" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent hostnames
+{
+  vars:
+    centos_7::
+      # Folder and file
+      "cloud_cfg_d" string => "/etc/cloud/cloud.cfg.d";
+      "hostname_cfg"  string => "$(cloud_cfg_d)/99_hostname.cfg";
+
+      # Cloud hostname options
+#      "locdomain" string => "devops.mycompany.com";
+#      "cloudhostops[hostname:]" string => $(sys.uqhost);
+#      "cloudhostops[fqdn:]"     string => $(sys.fqhost);
+      "kdchostops[hostname:]" string => "kdc-devops";
+      "kdchostops[fqdn:]"     string => "kdc-devops.$(def.domain)";
+      "ldaphostops[hostname:]" string => "ldap-devops";
+      "ldaphostops[fqdn:]"     string => "ldap-devops.$(def.domain)";
+
+  methods:
+    centos_7.kdcs::
+      "kdcshostname" usebundle => kdcs_hostname;
+    centos_7.ldaps::
+      "ldaphostname" usebundle => ldaps_hostname;
+
+}
+
+bundle agent kdcs_hostname
+{
+  files:
+      "$(hostnames.hostname_cfg)"
+      comment   => "Override aws hostname dhcp settings for kerberos hosts",
+      perms     => mog("644","root","root"),
+      create    => "true",
+      edit_defaults => no_backup,
+      edit_line => set_config_values("hostnames.kdchostops"),
+      classes   => if_repaired("kdc_modified");
+
+  reports:
+    kdc_modified::
+       "$(sys.date) $(sys.fqhost) $(hostnames.hostname_cfg) modified";
+    !kdc_modified::
+       "$(sys.date) $(sys.fqhost) $(hostnames.hostname_cfg) is not modified";
+
+}
+
+bundle agent ldaps_hostname
+{
+  files:
+      "$(hostnames.hostname_cfg)"
+      comment   => "Override aws hostname dhcp settings for ldap servers",
+      perms     => mog("644","root","root"),
+      create    => "true",
+      edit_defaults => no_backup,
+      edit_line => set_config_values("hostnames.ldaphostops"),
+      classes   => if_repaired("ldap_modified");
+
+  reports:
+    ldap_modified::
+       "$(sys.date) $(sys.fqhost) $(hostnames.hostname_cfg) modified";
+    !ldap_modified::
+       "$(sys.date) $(sys.fqhost) $(hostnames.hostname_cfg) is not modified";
+
+}
+

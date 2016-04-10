@@ -1,0 +1,112 @@
+###########################################
+# /var/cfengine/masterfiles/123b4b5b/cdh.cf
+###########################################
+#
+#
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cdh" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent cdh
+{
+  vars:
+    namenode::
+      "clname"     string => "Cluster1";
+      "cdh_ver"    string => "5.4.3";
+      "cdh_maj"    string => execresult("$(paths.echo) $(vc.cdh_ver) | $(paths.cut) -d'.' -f1","useshell");
+      "hostidjson" string => "/tmp/hostid.json";
+      "hostidtxt"  string => "$(def.cfshare)/hostid.txt";
+      "gethostid"  string => "$(paths.curl) $(vc.uadpass) $(vc.cmurl)/v10/hosts &> /dev/null";
+
+  commands:
+    namenode::
+      "$(gethostid) > $(hostidjson)"
+      contain => in_shell,
+      comment => "Create auxiliary json file with histIds and hostnames";
+
+  files:
+    namenode::
+      "$(cdh.hostidtxt)"
+      comment         => "Create auxiliary txt file with histIds and hostnames",
+      create          => "true",
+      perms           => mog("644","root","root"),
+      template_method => "mustache",
+      template_data   => readjson("$(cdh.hostidjson)", 9999),
+      edit_template   => "$(vc.cfetcdst)/hostid.mustache",
+      ifvarclass      => fileexists("$(cdh.hostidjson)"),
+      classes         => if_repaired("hostidtxt_edited");
+
+  reports:
+    hostidtxt_edited::
+      "$(sys.date) $(sys.uqhost) the $(hostidtxt) file is generated from $(hostidjson)";
+
+##
+## TODO - All methods must be re-writed with no flag-file using
+  methods:
+    namenode::
+      "enttrial" usebundle => entrial,
+      ifvarclass => not(fileexists("$(sys.logdir)/entrial.log")),
+      comment => "Start Trial";
+    namenode::
+      "crmgmt" usebundle => cr_mgmt,
+      ifvarclass => fileexists("$(sys.logdir)/entrial.log"),
+      comment => "Add Cloudera Management Service";
+
+}
+####
+bundle agent entrial
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xpost) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/trial/begin"
+      # contain    => in_shell,
+      classes    => if_repaired("trial_applied"),
+      ifvarclass => not(fileexists("$(def.cfshare)/roles-assigned.flag"));
+
+  files:
+    trial_applied::
+      "$(sys.logdir)/entrial.log"
+      comment       => "Flag file cloudera roles assigned",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Roles has been assigned by $(this.bundle)"),
+      classes       => if_repaired("trial_logged");
+
+  reports:
+    trial_applied::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/trial/begin\' has been invoked by $(this.bundle)";
+    trial_logged::
+       "$(sys.date) $(sys.uqhost) flag file \"$(sys.logdir)/entrial.log\" has been created by $(this.bundle)";
+}
+####
+bundle agent cr_mgmt
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) -d \'{ \"name\": \"mgmt\" }\' -i $(vc.cmurl)/v8/cm/service"
+      # contain    => in_shell,
+      classes    => if_repaired("mgmted"),
+      ifvarclass => not(fileexists("$(def.cfshare)/cdh-mgmt.flag"));
+
+  files:
+    mgmted::
+      "$(def.cfshare)/cdh-mgmt.flag"
+      comment       => "Flag file cloudera management service activated",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Management Service has been activated by $(this.bundle)"),
+      classes       => if_repaired("cdh_mgmted");
+
+  reports:
+    mgmted::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) -d \'{ \"name\": \"mgmt\" }\' -i $(vc.cmurl)/v8/cm/service\' has been invoked by $(this.bundle)";
+    cdh_mgmted::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/cdh-mgmt.flag\" has been created by $(this.bundle)";
+}
+####

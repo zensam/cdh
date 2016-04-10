@@ -1,0 +1,33 @@
+################################################
+# /var/cfengine/masterfiles/123b4b5b/selindis.cf
+################################################
+#
+# Disable selinux in config file
+#
+# Uncomment 'body common control' bundle to test policy by 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "selindis" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent selindis
+{
+  vars:
+    redhat_6|centos_6::
+      "seconf" string => "/etc/selinux/config";
+      "seldis" string => "SELINUX=disabled";
+
+  files:
+    redhat_6|centos_6::
+     "$(seconf)"
+     classes   => if_repaired("selconf_edited"),
+     edit_line => append_if_no_line("$(selindis.seldis)");
+
+  reports:
+     selconf_edited::
+     "$(sys.date) $(sys.uqhost) Modifiying $(seconf) by inserting $(seldis)";
+     !selconf_edited::
+     "$(sys.date) $(sys.uqhost) Selinux config is in required state";
+
+}

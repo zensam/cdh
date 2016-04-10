@@ -1,0 +1,6 @@
+[local-repo]
+# Some packages for RedHat 7 or CentOS 7 x86_64
+name=Red Hat Enterprise Linux $releasever - $basearch - CFEngine HUB
+baseurl=http://cfhub/yum/7/x86_64/
+enabled = 1
+gpgcheck = 0

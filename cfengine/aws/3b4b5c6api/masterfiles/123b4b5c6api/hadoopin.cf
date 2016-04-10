@@ -1,0 +1,66 @@
+####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/hadoopin.cf
+####################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "hadoopin" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent hadoopin
+{
+  vars:
+#      "hadoop_arch_url" string => "https://s3.eu-central-1.amazonaws.com/<mycompany-aws-resource>/hadoop-latest.tar.gz";
+      "hadoop_file"     string => "hadoop-latest.tar.gz";
+      "ziploc" string => "/var/cfengine/inputs/qdbp/zip";
+
+  methods:
+      "inhadoop" usebundle => in_hadoop,
+      comment => "Install Hadoop";
+
+}
+
+bundle agent in_hadoop
+{
+  classes:
+   (cloudnode|macloud)::
+      "no_hadoop" not => fileexists("/opt/hadoop.git/.");
+
+  files:
+    no_hadoop::
+      "$(sys.workdir)/$(hadoopin.hadoop_file)"
+        handle    => "copy_hadooptar_to_tmp",
+        perms     => mog("644","root","root"),
+        copy_from => local_cp("$(hadoopin.ziploc)/$(hadoopin.hadoop_file).txt"),
+        classes   => if_repaired("hadoop_copied");
+
+  commands:
+    hadoop_copied::
+       "/bin/tar --directory=/opt -zxf $(sys.workdir)/$(hadoopin.hadoop_file)"
+        handle  => "extract_hadoop",
+        comment => "Extract hadoop by command",
+#        contain => in_shell,
+        classes => if_repaired("h_extracted");
+
+#    h_extracted::
+#       "/bin/ln -s /opt/phantomjs-1.9.8-linux-x86_64/bin/phantomjs /usr/bin"
+#        handle  => "link_hadoop_to_usr_bin",
+#        comment => "Link hadoop",
+#        contain => in_shell,
+#        classes => if_repaired("h_linked");
+
+  reports:
+    no_hadoop::
+       "$(sys.date) $(sys.uqhost) hadoop is not installed";
+    !no_hadoop::
+       "$(sys.date) $(sys.uqhost) hadoop is already installed";
+    hadoop_copied::
+       "$(sys.date) $(sys.uqhost) $(hadoopin.hadoop_file).txt file copied to $(hadoopin.hadoop_file)";
+    !hadoop_copied::
+       "$(sys.date) $(sys.uqhost) $(hadoopin.hadoop_file) is not refreshed";
+    h_extracted::
+       "$(sys.date) $(sys.uqhost) $(hadoopin.hadoop_file) has been extracted";
+
+}

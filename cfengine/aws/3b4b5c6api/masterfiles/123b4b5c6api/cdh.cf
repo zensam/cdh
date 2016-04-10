@@ -1,0 +1,369 @@
+###############################################
+# /var/cfengine/masterfiles/123b4b5c6api/cdh.cf
+###############################################
+#
+# Deploy cloudera management services and cluster roles
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cdh" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent cdh
+{
+  vars:
+    namenode::
+      "clname"     string => "Cluster1";
+      "cdh_ver"    string => "5.4.3";
+      "cdh_maj"    string => execresult("$(paths.echo) $(vc.cdh_ver) | $(paths.cut) -d'.' -f1","useshell");
+      "hostidjson" string => "/tmp/hostid.json";
+      "hostidtxt"  string => "$(def.cfshare)/hostid.txt";
+      "gethostid"  string => "$(paths.curl) $(vc.uadpass) $(vc.cmurl)/v10/hosts &> /dev/null";
+
+  commands:
+    namenode::
+      "$(gethostid) > $(hostidjson)"
+      contain => in_shell,
+      comment => "Create auxiliary json file with histIds and hostnames";
+
+  files:
+    namenode::
+      "$(cdh.hostidtxt)"
+      comment         => "Create auxiliary txt file with histIds and hostnames",
+      create          => "true",
+      perms           => mog("644","root","root"),
+      template_method => "mustache",
+      template_data   => readjson("$(cdh.hostidjson)", 9999),
+      edit_template   => "$(vc.cfetcdst)/hostid.mustache",
+      ifvarclass      => fileexists("$(cdh.hostidjson)"),
+      classes         => if_repaired("hostidtxt_edited");
+
+  reports:
+    hostidtxt_edited::
+      "$(sys.date) $(sys.uqhost) the $(hostidtxt) file is generated from $(hostidjson)";
+
+##
+## TODO - All methods must be re-writed with no flag-file using
+  methods:
+    namenode::
+      "crmgmt" usebundle => cr_mgmt,
+      ifvarclass => fileexists("$(def.cfshare)/entrial.flag"),
+      comment => "Add Cloudera Management Service";
+    namenode::
+      "asroles" usebundle => as_roles,
+      ifvarclass => fileexists("$(def.cfshare)/cdh-mgmt.flag"),
+      comment => "Assign Roles";
+    namenode::
+      "confroles" usebundle => conf_roles,
+      ifvarclass => fileexists("$(def.cfshare)/roles-assigned.flag"),
+      comment => "Configure Roles";
+    namenode::
+      "repman" usebundle => rman,
+      # ifvarclass => fileexists("$(def.cfshare)/cdh-mgmt.flag"),
+      ifvarclass => fileexists("$(def.cfshare)/roles-configured.flag"),
+      comment => "Setting Report Manager DB";
+    namenode::
+      "navigatoroff" usebundle => navoff,
+      ifvarclass => fileexists("$(def.cfshare)/rman.flag"),
+      comment => "Delete Navigator Entry";
+    namenode::
+      "mgmtstart" usebundle => mgmtup,
+      ifvarclass => fileexists("$(def.cfshare)/navigator-off.flag"),
+      comment => "Start Cloudera Management Service";
+    namenode::
+      "crcluster" usebundle => crcl,
+      ifvarclass => fileexists("$(def.cfshare)/mgmt-started.flag"),
+      comment => "Create Cloudera Cluster";
+    namenode::
+      "setcl" usebundle => setcluster,
+      ifvarclass => fileexists("$(def.cfshare)/cluster-created.flag"),
+      comment => "Set Cluster";
+
+}
+####
+bundle agent cr_mgmt
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) -d \'{ \"name\": \"mgmt\" }\' -i $(vc.cmurl)/v8/cm/service"
+      # contain    => in_shell,
+      classes    => if_repaired("mgmted"),
+      ifvarclass => not(fileexists("$(def.cfshare)/cdh-mgmt.flag"));
+
+  files:
+    mgmted::
+      "$(def.cfshare)/cdh-mgmt.flag"
+      comment       => "Flag file cloudera management service activated",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Management Service has been activated by $(this.bundle)"),
+      classes       => if_repaired("cdh_mgmted");
+
+  reports:
+    mgmted::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) -d \'{ \"name\": \"mgmt\" }\' -i $(vc.cmurl)/v8/cm/service\' has been invoked by $(this.bundle)";
+    cdh_mgmted::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/cdh-mgmt.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent as_roles
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/autoAssignRoles"
+      # contain    => in_shell,
+      classes    => if_repaired("roles_assigned"),
+      ifvarclass => not(fileexists("$(def.cfshare)/roles-assigned.flag"));
+
+  files:
+    roles_assigned::
+      "$(def.cfshare)/roles-assigned.flag"
+      comment       => "Flag file cloudera roles assigned",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Roles has been assigned by $(this.bundle)"),
+      classes       => if_repaired("roles_flagged");
+
+  reports:
+    roles_assigned::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/autoAssignRoles\' has been invoked by $(this.bundle)";
+    roles_flagged::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/roles-assigned.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent conf_roles
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/autoConfigure"
+      # contain    => in_shell,
+      classes    => if_repaired("roles_configured"),
+      ifvarclass => not(fileexists("$(def.cfshare)/roles-configured.flag"));
+
+  files:
+    roles_configured::
+      "$(def.cfshare)/roles-configured.flag"
+      comment       => "Flag file cloudera roles configured",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Roles has been configured by $(this.bundle)"),
+      classes       => if_repaired("roles_conf_flagged");
+
+  reports:
+    roles_configured::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/autoConfigure\' has been invoked by $(this.bundle)";
+    roles_conf_flagged::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/roles-configured.flag\" has been created by $(this.bundle)";
+
+}
+####
+bundle agent rman
+{
+  vars:
+    namenode::
+      "rmanpass" string => execresult("$(paths.grep) com.cloudera.cmf.REPORTSMANAGER.db.password \
+/etc/cloudera-scm-server/db.mgmt.properties | $(paths.cut) -d= -f2", "useshell");
+      "rmanopd"   string => "{ \"items\": [{\"name\": \"headlamp_database_host\", \"value\": \"$(vc.cmss):7432\"}, \
+{\"name\": \"headlamp_database_name\", \"value\": \"rman\"}, {\"name\": \"headlamp_database_password\", \"value\": \"$(rmanpass)\"}, \
+{\"name\": \"headlamp_database_user\", \"value\": \"rman\"}, {\"name\": \"headlamp_database_type\", \"value\": \"postgresql\"}]}";
+
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) -d \'$(rmanopd)\' -i $(vc.cmurl)/v10/cm/service/roleConfigGroups/mgmt-REPORTSMANAGER-BASE/config"
+      # contain    => in_shell,
+      classes    => if_repaired("rmanned"),
+      ifvarclass => not(fileexists("$(def.cfshare)/rman.flag"));
+
+  files:
+    rmanned::
+      "$(def.cfshare)/rman.flag"
+      comment       => "Flag file cloudera management service activated",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Report Manager DB has been set by $(this.bundle)"),
+      classes       => if_repaired("cdh_rmanned");
+
+  reports:
+    rmanned::
+       "$(sys.date) $(sys.uqhost) command $(paths.curl) $(vc.xput) $(vc.uadpass) $(vc.contype) \
+-d \'$(rmanopd)\' -i $(vc.cmurl)/v10/cm/service/roleConfigGroups/mgmt-REPORTSMANAGER-BASE/config \
+has been invoked by $(this.bundle)";
+    cdh_rmanned::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/rman.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent navoff
+{
+  vars:
+    namenode::
+      "navmeta" string => execresult("$(paths.curl) -sS $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles | \
+$(paths.grep) -B1 \'\"type\" : \"NAVIGATORMETASERVER\"\' | $(paths.grep) name | $(paths.cut) -d\'\"\' -f4", "useshell");
+      "navser"  string => execresult("$(paths.curl) -sS $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles | \
+$(paths.grep) -B1 \'\"type\" : \"NAVIGATOR\"\' | $(paths.grep) name | $(paths.cut) -d\'\"\' -f4", "useshell");
+
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xdelete) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles/$(navmeta)"
+      # contain    => in_shell,
+      classes    => if_repaired("navmetaoff"),
+      ifvarclass => not(fileexists("$(def.cfshare)/navigator-off.flag"));
+    namenode::
+      "$(paths.curl) $(vc.xdelete) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles/$(navser)"
+      # contain    => in_shell,
+      classes    => if_repaired("navseroff"),
+      ifvarclass => not(fileexists("$(def.cfshare)/navigator-off.flag"));
+
+  files:
+    navmetaoff.navseroff::
+      "$(def.cfshare)/navigator-off.flag"
+      comment       => "Flag file cloudera navigator entries removed",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Navigator server and metaserver entries are removed by $(this.bundle)"),
+      classes       => if_repaired("navigator_off");
+
+  reports:
+    navmetaoff.navseroff::
+       "$(sys.date) $(sys.uqhost) command \"$(paths.curl) $(vc.xdelete) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles/$(navmeta)\" and \"$(paths.curl) $(vc.xdelete) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/roles/$(navser)\" has been invoked by $(this.bundle)";
+    navigator_off::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/navigator-off.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent mgmtup
+{
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xpost) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/commands/start"
+      # contain    => in_shell,
+      classes    => if_repaired("mgmt_started"),
+      ifvarclass => not(fileexists("$(def.cfshare)/mgmt-started.flag"));
+
+  files:
+    mgmt_started::
+      "$(def.cfshare)/mgmt-started.flag"
+      comment       => "Flag file cloudera mgmt started",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cloudera Management Service has been started by $(this.bundle)"),
+      classes       => if_repaired("mgmtup_flagged");
+
+  reports:
+    mgmt_started::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xpost) $(vc.uadpass) -i $(vc.cmurl)/v10/cm/service/commands/start\' has been invoked by $(this.bundle)";
+    mgmtup_flagged::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/mgmt-started.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent crcl
+{
+  vars:
+    namenode::
+      "crclopd" string => "{ \"items\": [ {\"name\": \"$(cdh.clname)\", \"version\": \"CDH5\", \"fullVersion\": \"$(cdh.cdh_ver)\" } ] }";
+
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xpost) $(vc.uadpass) $(vc.contype) -d \'$(crclopd)\' -i $(vc.cmurl)/v10/clusters"
+      # contain    => in_shell,
+      classes    => if_repaired("cluster_created"),
+      ifvarclass => not(fileexists("$(def.cfshare)/cluster-created.flag"));
+
+  files:
+    cluster_created::
+      "$(def.cfshare)/cluster-created.flag"
+      comment       => "Flag file cloudera mgmt started",
+      perms         => mog("444","root","root"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.date) - Cluster \"$(cdh.clname)\" has been created by $(this.bundle)"),
+      classes       => if_repaired("crcl_flagged");
+
+  reports:
+    cluster_created::
+       "$(sys.date) $(sys.uqhost) command \'$(paths.curl) $(vc.xpost) $(vc.uadpass) $(vc.contype) -d \'$(crclopd)\' -i $(vc.cmurl)/v10/clusters\' has been invoked by $(this.bundle)";
+    crcl_flagged::
+       "$(sys.date) $(sys.uqhost) flag file \"$(def.cfshare)/cluster-created.flag\" has been created by $(this.bundle)";
+}
+####
+bundle agent setcluster
+{
+  vars:
+    namenode::
+      "host_id_str" string => execresult("$(paths.curl) -sS $(vc.uadpass) -i $(vc.cmurl)/v10/hosts | \
+$(paths.grep) \'\"hostId\"\' | $(paths.cut) -d\'\"\' -f4", "useshell");
+      "host_id_lst"  slist => string_split("$(host_id_str)", "$(const.n)", "99");
+
+  methods:
+    namenode::
+     "as_hosts" usebundle => ashosts("$(host_id_lst)");
+    namenode::
+     "asserroles" usebundle => asserol;
+
+}
+bundle agent ashosts(hostid)
+{
+  commands:
+    namenode::
+      # "/usr/bin/curl -X POST -u admin:q1w2e3r4 -H \"content-type:application/json\" -d \'{ \"items\": [ {\"hostId\": \"$(hostid)\"} ] }\' -i http://localhost:7180/api/v10/clusters/Cluster1/hosts"
+      "$(paths.curl) $(vc.xpost) $(vc.uadpass) $(vc.contype) -d \'{ \"items\": [ {\"hostId\": \"$(hostid)\"} ] }\' -i $(vc.cmurl)/v10/clusters/$(cdh.clname)/hosts >> $(def.cfshare)/$(hostid).flag"
+      contain    => in_shell,
+      ifvarclass => not(fileexists("$(def.cfshare)/$(hostid).flag")),
+      comment    => "assign hosts to cluster";
+
+  # files:
+  #  namenode::
+  #    "$(def.cfshare)/$(hostid).flag"
+  #    perms         => mog("444","root","root"),
+  #    create        => "false",
+  #    edit_defaults => no_backup,
+  #    ifvarclass    => not(fileexists("$(def.cfshare)/$(hostid).flag")),
+  #    edit_line     => append_if_no_line("$(sys.date) - Host with Id == $(hostid) is added to $(cdh.clname) by $(this.bundle)"),
+  #    comment       => "Flag file for the hosts assigned to cluster";
+}
+bundle agent asserol
+{
+  vars:
+    namenode::
+      "namenodeid" string => execresult("$(paths.grep) $(hdfs.master) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "secondnnid" string => execresult("$(paths.grep) $(confcloud.secondnamenode) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "zoo1id"     string => execresult("$(paths.grep) $(zookeeper.zoo1) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "zoo2id"     string => execresult("$(paths.grep) $(zookeeper.zoo2) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "zoo3id"     string => execresult("$(paths.grep) $(zookeeper.zoo3) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      # "zoo4id"     string => execresult("$(paths.grep) $(zookeeper.zoo4) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      # "zoo5id"     string => execresult("$(paths.grep) $(zookeeper.zoo5) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "jtrackid"   string => execresult("$(paths.grep) $(hdfs.jobtrackhost) $(cdh.hostidtxt) | $(paths.awk) '{print $2}'","useshell");
+      "dnodesids"  string => execresult("$(paths.awk) '{print $2}' $(cdh.hostidtxt)","useshell"); # to be handled by separate bundle like ashosts
+      "dnodidslst"  slist => string_split("$(dnodesids)", "$(const.n)", "99");
+      "asservsopd" string => "{ \"items\": [{\"name\": \"zookeeper\", \"type\": \"ZOOKEEPER\"}, \
+{\"name\": \"hdfs\", \"type\": \"HDFS\"}, {\"name\": \"hive\", \"type\": \"HIVE\"}, \
+{\"name\": \"oozie\", \"type\": \"OOZIE\"}, {\"name\": \"mapreduce1\", \"type\": \"MAPREDUCE\"}]}";
+
+  commands:
+    namenode::
+      "$(paths.curl) $(vc.xpost) $(vc.uadpass) $(vc.contype) -d \'$(asservsopd)\' -i $(vc.cmurl)/v10/clusters/$(cdh.clname)/services >> $(def.cfshare)/$(this.bundle).log"
+      contain    => in_shell,
+      classes    => if_repaired("clservs_assigned"),
+      ifvarclass => not(fileexists("$(def.cfshare)/$(this.bundle).log"));
+    ## Assign and Configure Cluster Roles
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/clusters/$(cdh.clname)/autoAssignRoles >> $(def.cfshare)/$(cdh.clname)-autoroles.log"
+      contain    => in_shell,
+      ifvarclass => and(not(fileexists("$(def.cfshare)/$(cdh.clname)-autoroles.log")),fileexists("$(def.cfshare)/$(this.bundle).log"));
+    namenode::
+      "$(paths.curl) $(vc.xput) $(vc.uadpass) -i $(vc.cmurl)/v10/clusters/$(cdh.clname)/autoConfigure >> $(def.cfshare)/$(cdh.clname)-autoconfigure.log"
+      contain    => in_shell,
+      ifvarclass => and(not(fileexists("$(def.cfshare)/$(cdh.clname)-autoconfigure.log")),fileexists("$(def.cfshare)/$(this.bundle).log"));
+
+  reports:
+    clservs_assigned::
+       "$(sys.date) $(sys.uqhost) command \"$(paths.curl) $(vc.xpost) $(vc.uadpass) $(vc.contype) \
+-d \'$(asservsopd)\' -i $(vc.cmurl)/v10/clusters/$(cdh.clname)/service\" has been invoked by $(this.bundle)";
+}
+####

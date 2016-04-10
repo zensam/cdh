@@ -1,0 +1,554 @@
+################################################
+# /var/cfengine/masterfiles/123b4b5c6api/hdfs.cf
+################################################
+# http://archive.cloudera.com/cdh5/cdh/5/hadoop/hadoop-project-dist/hadoop-hdfs/hdfs-default.xml
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "hdfs" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent hdfs
+{
+  vars:
+      # DFS Names and parameters
+      "master"                     string => "$(confcloud.cloudmaster)";
+      "jobtrackhost"               string => "node2.$(def.domain)"; # for one node as jobtrack configuration, depends on
+                                                                    # jobtracker class definition in vc.cf
+      "dfsdir"                     string => "/dfs";
+      # hadoop-env.sh
+      # hdfs-site.xml
+      "namenode_name_dir"          string => "$(hdfs.dfsdir)/nn";  # hdfs-site.xml on the NameNode
+      "datanode_data_dir"          string => "$(hdfs.dfsdir)/dn";  # hdfs-site.xml on each DataNode
+      # for the case of multiple datanode data directories
+      # "dn_dir_1"                   string => "$(hdfs.dfsdir)/dn1";
+      # "dn_dir_2"                   string => "$(hdfs.dfsdir)/dn2";
+      # "dn_dir_3"                   string => "$(hdfs.dfsdir)/dn3";
+      # "dn_dir_4"                   string => "$(hdfs.dfsdir)/dn4";
+      # "dn_dir_all"                  slist => { "$(hdfs.datanode_data_dir_1)",
+      #                                          "$(hdfs.datanode_data_dir_2)",
+      #                                          "$(hdfs.datanode_data_dir_3)",
+      #                                          "$(hdfs.datanode_data_dir_4)",
+      #                                         };
+      # "dn_dirs"                    string => join(",", $(hdfs.dn_dir_all));
+
+      "permissions_superusergroup" string => "hadoop";
+      "dfs_replication"            string => "3";
+      "dfs_blocksize"              string => "134217728";
+      "dfs_https_port"             string => "50470";
+      "dfs_http_port"              string => "50070";
+      "namenode_checkpoint_dir"    string => "$(hdfs.dfsdir)/snn";   # hdfs-site.xml on Secondary NameNode
+      # "checkpoint_edits_dir"       string => "$(hdfs.namenode_checkpoint_dir)";
+      "checkpoint_edits_dir"       string => "$(hdfs.dfsdir)/snned"; # default - $(hdfs.namenode_checkpoint_dir)"
+      "checkpoint_check_period"    string => "30";                   # default - 60 sek
+      "checkpoint_txns"            string => "100000";               # default - 1000000 transactions
+      "num_checkpoints_retained"   string => "3";                    # default - 2 image checkpoint files
+      "dn_failed_vols_tolerated"   string => "0";                    # default - 0 The number of volumes that are allowed to fail
+                                                                     # before a datanode stops offering service.
+                                                                     # By default any volume failure will cause a datanode to shutdown.
+      # core-site.xml
+      "hadoop_security_auth"       string => "simple";
+      "hadoop_security_authoriz"   string => "false";
+      "trash_interval"             string => "10"; # The number of minutes after which a trash checkpoint directory is deleted.
+      "hadoop_rpc_protection"      string => "authentication";
+      "io_compression_codecs"      string => "org.apache.hadoop.io.compress.DefaultCodec,org.apache.hadoop.io.compress.GzipCodec,org.apache.hadoop.io.compress.BZip2Codec,org.apache.hadoop.io.compress.DeflateCodec,org.apache.hadoop.io.compress.SnappyCodec,org.apache.hadoop.io.compress.Lz4Codec";
+      # mapred-site.xml
+      "mapred_dir"                 string => "$(hdfs.dfsdir)/mapred";
+      "mapred_local_dir"           string => "$(hdfs.mapred_dir)/local"; # This property specifies the directories where the
+                                                                         # TaskTracker will store temporary data and intermediate
+                                                                         # map output files while running MapReduce jobs.
+      # Files and folders
+      "hadoop_conf_empty" string => "/etc/hadoop/conf.empty";
+      "hadoop_confdir"    string => "/etc/hadoop/conf.qdbp";
+      "hdfs_masters"      string => "$(hdfs.hadoop_confdir)/masters";
+      "hdfs_slaves"       string => "$(hdfs.hadoop_confdir)/slaves";
+      "hdfs_site_xml"     string => "$(hdfs.hadoop_confdir)/hdfs-site.xml";
+      "core_site_xml"     string => "$(hdfs.hadoop_confdir)/core-site.xml";
+      "mapred_site_xml"   string => "$(hdfs.hadoop_confdir)/mapred-site.xml";
+      "log4j_properties"  string => "$(hdfs.hadoop_confdir)/log4j.properties";
+      "ssl_client_xml"    string => "$(hdfs.hadoop_confdir)/ssl-client.xml";
+      # unchanged from /etc/hadoop/conf.empty
+      "cap_scheduler_xml" string => "$(hdfs.hadoop_confdir)/capacity-scheduler.xml";
+      "configuration_xsl" string => "$(hdfs.hadoop_confdir)/configuration.xsl";
+      "container_exe_cfg" string => "$(hdfs.hadoop_confdir)/container-executor.cfg";
+      "fair_schedul_xml"  string => "$(hdfs.hadoop_confdir)/fair-scheduler.xml";
+      "metrics2_props"    string => "$(hdfs.hadoop_confdir)/hadoop-metrics2.properties";
+      "metrics_props"     string => "$(hdfs.hadoop_confdir)/hadoop-metrics.properties";
+      "policy_xml"        string => "$(hdfs.hadoop_confdir)/hadoop-policy.xml";
+      "yarn_env_sh"       string => "$(hdfs.hadoop_confdir)/yarn-env.sh";
+      "yarn_site_xml"     string => "$(hdfs.hadoop_confdir)/yarn-site.xml";
+      "map_que_xml_tmp"   string => "$(hdfs.hadoop_confdir)/mapred-queues.xml.template";
+      "map_site_xml_tmp"  string => "$(hdfs.hadoop_confdir)/mapred-site.xml.template";
+      "conflist"           slist => {
+                                    "$(hdfs.hdfs_masters)",
+                                    "$(hdfs.hdfs_slaves)",
+                                    "$(hdfs.hdfs_site_xml)",
+                                    "$(hdfs.core_site_xml)",
+                                    "$(hdfs.mapred_site_xml)",
+                                    "$(hdfs.log4j_properties)",
+                                    "$(hdfs.ssl_client_xml)",
+                                    "$(hdfs.cap_scheduler_xml)",
+                                    "$(hdfs.configuration_xsl)",
+                                    "$(hdfs.container_exe_cfg)",
+                                    "$(hdfs.fair_schedul_xml)",
+                                    "$(hdfs.metrics2_props)",
+                                    "$(hdfs.metrics_props)",
+                                    "$(hdfs.policy_xml)",
+                                    "$(hdfs.yarn_env_sh)",
+                                    "$(hdfs.yarn_site_xml)",
+                                    "$(hdfs.map_que_xml_tmp)",
+                                    "$(hdfs.map_site_xml_tmp)",
+                                    };
+
+      # Commands
+      # Before starting the NameNode for the first time you need to format the file system.
+      # Make sure you format the NameNode as user hdfs.
+      # If you are re-formatting the NameNode, keep in mind that this invalidates the DataNode storage locations,
+      # so you should remove the data under those locations after the NameNode is formatted.
+      # If Kerberos is enabled, do not use commands in the form sudo -u <user> hadoop <command>;
+      # they will fail with a security error.
+      # Instead, use the following commands: $ kinit <user> (if you are using a password)
+      # or $ kinit -kt <keytab> <principal>
+      # (if you are using a keytab) and then, for each command executed by this user, $ <command>
+      "formatdfs" string => "/usr/bin/sudo -u hdfs /usr/bin/hdfs namenode -format";
+
+      # To deploy your configuration to your entire cluster:
+      # 1. Push your custom directory (for example /etc/hadoop/conf.my_cluster) to each node in your cluster; for example:
+      # $ scp -r /etc/hadoop/conf.my_cluster myuser@myCDHnode-<n>.mycompany.com:/etc/hadoop/conf.my_cluster
+      # 2. Manually set alternatives on each node to point to that directory, as follows:
+      "alterins"  string => "/usr/sbin/alternatives --install /etc/hadoop/conf hadoop-conf $(hdfs.hadoop_confdir) 50";
+      "alterset"  string => "/usr/sbin/alternatives --set hadoop-conf $(hdfs.hadoop_confdir)";
+
+      # Start HDFS on each node in the cluster, as follows:
+      # "hdfsgo"   string => "for x in `cd /etc/init.d ; ls hadoop-hdfs-*` ; do sudo service $x start ; done";
+
+      # Create the /tmp directory after HDFS is up and running, and set its permissions to 1777 (drwxrwxrwt), as follows:
+      # If Kerberos is enabled, do not use commands in the form sudo -u <user> hadoop <command>; they will fail with a security error.
+      # Instead, use the following commands: $ kinit <user> (if you are using a password)
+      # or $ kinit -kt <keytab> <principal> (if you are using a keytab) and then, for each command executed by this user, $ <command>
+      # "mktmp"     string => "/usr/bin/sudo -u hdfs /usr/bin/hadoop fs -mkdir /tmp";         # /tmp is already good at centos_6
+      # "chmodtmp"  string => "/usr/bin/sudo -u hdfs /usr/bin/hadoop fs -chmod -R 1777 /tmp"; # /tmp is already good at centos_6
+      # Copy the default configuration to your custom directory:
+      "cpconf"    string => "/bin/cp -r /etc/hadoop/conf.empty $(hdfs.hadoop_confdir)";
+      # Copy generated configuration to $(def.cfshare) with full path:
+      "shareconf" string => "/usr/bin/rsync -azR $(hdfs.hadoop_confdir) $(def.cfshare)";
+
+      # get slaves list to slaves file
+      "slavesstr" string => execresult("/bin/cat $(vc.hostsfile) | /bin/grep $(def.domain) | /bin/grep -v cloudera | /bin/awk '{print $2}'","useshell");
+
+      # http://www.cloudera.com/content/cloudera/en/documentation/core/latest/topics/cdh_ig_mr_cluster_deploy.html
+      # Deploying MapReduce v1 (MRv1) on a Cluster
+      # Step 8: Create MapReduce /var directories
+      # sudo -u hdfs hadoop fs -mkdir -p /var/lib/hadoop-hdfs/cache/mapred/mapred/staging
+      # sudo -u hdfs hadoop fs -chmod 1777 /var/lib/hadoop-hdfs/cache/mapred/mapred/staging
+      # sudo -u hdfs hadoop fs -chown -R mapred /var/lib/hadoop-hdfs/cache/mapred
+      # Step 9: Verify the HDFS File Structure
+      # sudo -u hdfs hadoop fs -ls -R /
+      # Step 10: Create and Configure the mapred.system.dir Directory in HDFS
+      # After you start HDFS and create /tmp, but before you start the JobTracker,
+      # you must also create the HDFS directory specified by the mapred.system.dir parameter
+      # (by default ${hadoop.tmp.dir}/mapred/system and configure it to be owned by the mapred user.
+      # $ sudo -u hdfs hadoop fs -mkdir /tmp/mapred/system
+      # $ sudo -u hdfs hadoop fs -chown mapred:hadoop /tmp/mapred/system
+      # If you create the mapred.system.dir directory in a different location,
+      # specify that path in the conf/mapred-site.xml file.
+      # When starting up, MapReduce sets the permissions for the mapred.system.dir directory to drwx------,
+      # assuming the user mapred owns that directory.
+
+
+    # HDFS services for NameNodes
+    namenode::
+      "seron_nn"  slist => {
+                           "hadoop-hdfs-namenode",
+                           };
+
+    # HDFS services for Secondary NameNodes
+    secondnnode::
+      "seron_snn" slist => {
+                           "hadoop-hdfs-secondarynamenode",
+                           };
+
+    # HDFS services for DataNodes
+    datanode::
+      "seron_dn"  slist => {
+                           "hadoop-hdfs-datanode",
+                           "hadoop-0.20-mapreduce-tasktracker",
+                           };
+
+    # HDFS services for JobTrackers
+    jobtracker::
+      "seron_jt"  slist => {
+                           "hadoop-0.20-mapreduce-jobtracker",
+                           };
+    # HDFS services for Journal Nodes
+    # journalnode::
+    #  "seron_jn"  slist => {
+    #                       "hadoop-hdfs-journalnode",
+    #                       };
+
+    # HDFS services for Map Reduce History servers
+    # maphistnode::
+    #  "seron_hs"  slist => {
+    #                       "hadoop-mapreduce-historyserver",
+    #                       };
+####
+####
+  files:
+    namenode::
+      "$(hdfs.hadoop_confdir)/."
+      perms   => mog("755", "root", "root"),
+      create  => "true",
+      classes => if_repaired("hadoopconf_nn_moded");
+##
+    noded.!namenode::
+      "$(hdfs.hadoop_confdir)/."
+      perms        => mog("755", "root", "root"),
+      comment      => "/etc/hadoop/conf.qdbp to be a copy of /mnt/nfs/etc/hadoop/conf.qdbp",
+      ifvarclass   => and(fileexists("$(nfscl.mntnfs)/nfsflag"),not(filesexist("@(hdfs.conflist)"))),
+      copy_from    => local_cp("$(nfscl.mntnfs)$(hdfs.hadoop_confdir)"),
+      # copy_from    => secure_cp("$(def.cfshare)/$(hdfs.hadoop_confdir)", "$(confcloud.cloudmaster)"),
+      # copy_from    => secure_cp("$(def.cfshare)/$(hdfs.hadoop_confdir)", "$(sys.policy_hub)"),
+      depth_search => recurse("inf"),
+      classes      => if_repaired("hadoopconf_moded");
+##
+    datanode::
+      "$(hdfs.conflist)"
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "false",
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      edit_defaults => no_backup;
+##
+    noded::
+      "$(hdfs.dfsdir)/."
+      perms   => mog("755", "root", "root"),
+      create  => "true",
+      classes => if_repaired("dfs_created");
+##
+    namenode::
+      "$(hdfs.namenode_name_dir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      create     => "true",
+      classes    => if_repaired("nn_created");
+##
+    secondnnode::
+      "$(hdfs.namenode_checkpoint_dir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      classes    => if_repaired("snn_created");
+##
+    secondnnode::
+      "$(hdfs.checkpoint_edits_dir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      classes    => if_repaired("snned_created");
+##
+    datanode::
+      "$(hdfs.datanode_data_dir)/."
+      perms      => mog("700", "hdfs", "hdfs"),
+      create     => "true",
+      ifvarclass => and(userexists("hdfs"),groupexists("hdfs")),
+      classes    => if_repaired("dn_created");
+##
+    jobtracker::
+      "$(hdfs.mapred_local_dir)/."
+      perms      => mog("755", "mapred", "hadoop"),
+      create     => "true",
+      # ifvarclass => and(userexists("mapred"),groupexists("hadoop")),
+      classes    => if_repaired("mapred_local_dired");
+##
+    # $(hdfs.hadoop_confdir) fill
+    namenode::
+      "$(hdfs.hdfs_masters)"
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      edit_template => "$(vc.cfetcdst)/masters.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.hdfs_slaves)"
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      edit_template => "$(vc.cfetcdst)/slaves.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.hdfs_site_xml)"
+      comment       => "Make sure hdfs-site.xml contains desired configuration settings",
+      handle        => "edit_hdfs_site_xml",
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      # classes       => if_repaired("hdfs_site_edited"),
+      edit_template => "$(vc.cfetcdst)/hdfs-site.xml.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.core_site_xml)"
+      comment       => "Make sure core-site.xml contains desired configuration settings",
+      handle        => "edit_core_site_xml",
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      # classes       => if_repaired("core_site_edited"),
+      edit_template => "$(vc.cfetcdst)/core-site.xml.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.mapred_site_xml)"
+      comment       => "Make sure mapred-site.xml contains desired configuration settings",
+      handle        => "edit_mapred_site_xml",
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      # classes       => if_repaired("mapred_site_edited"),
+      edit_template => "$(vc.cfetcdst)/mapred-site.xml.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.log4j_properties)"
+      comment       => "Make sure log4j.properties contains desired configuration settings",
+      handle        => "edit_log4j_properties",
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      # classes       => if_repaired("log4j_edited"),
+      edit_template => "$(vc.cfetcdst)/log4j.properties.tmpl.txt";
+##
+    namenode::
+      "$(hdfs.ssl_client_xml)"
+      comment       => "Make sure ssl-client.xml contains desired configuration settings",
+      handle        => "edit_ssl_client_xml",
+      perms         => mog("0644","hdfs","hdfs"),
+      create        => "true",
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      # classes       => if_repaired("ssl_client_edited"),
+      edit_template => "$(vc.cfetcdst)/ssl-client.xml.tmpl.txt";
+##
+    # unchanged from /etc/hadoop/conf.empty
+    namenode::
+      "$(hdfs.cap_scheduler_xml)"
+      comment       => "Copy capacity-scheduler.xml from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/capacity-scheduler.xml");
+    namenode::
+      "$(hdfs.configuration_xsl)"
+      comment       => "Copy configuration.xsl from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/configuration.xsl");
+    namenode::
+      "$(hdfs.container_exe_cfg)"
+      comment       => "Copy container-executor.cfg from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/container-executor.cfg");
+    namenode::
+      "$(hdfs.fair_schedul_xml)"
+      comment       => "Copy fair-scheduler.xml from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/fair-scheduler.xml");
+    namenode::
+      "$(hdfs.metrics2_props)"
+      comment       => "Copy hadoop-metrics2.properties from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/hadoop-metrics2.properties");
+    namenode::
+      "$(hdfs.metrics_props)"
+      comment       => "Copy hadoop-metrics.properties from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/hadoop-metrics.properties");
+    namenode::
+      "$(hdfs.policy_xml)"
+      comment       => "Copy hadoop-policy.xml from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/hadoop-policy.xml");
+    namenode::
+      "$(hdfs.yarn_env_sh)"
+      comment       => "Copy yarn-env.sh from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/yarn-env.sh");
+    namenode::
+      "$(hdfs.yarn_site_xml)"
+      comment       => "Copy yarn-site.xml from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/yarn-site.xml");
+    namenode::
+      "$(hdfs.map_que_xml_tmp)"
+      comment       => "Copy mapred-queues.xml.template from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/mapred-queues.xml.template");
+    namenode::
+      "$(hdfs.map_site_xml_tmp)"
+      comment       => "Copy mapred-site.xml.template from conf.empty",
+      perms         => mog("0644","hdfs","hdfs"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(userexists("hdfs"),groupexists("hdfs")),
+      copy_from     => local_cp("$(hdfs.hadoop_conf_empty)/mapred-site.xml.template");
+##
+##
+   commands:
+     namenode::
+       "$(hdfs.shareconf)"
+       handle  => "rsync_hdfs_conf_to_share",
+       comment => "Copy configuration to share directory",
+       contain => in_shell,
+       ifvarclass => and(filesexist("@(hdfs.conflist)"),not(fileexists("$(def.cfshare)/$(hdfs.hadoop_confdir)"))),
+       # ifvarclass => filesexist("@(hdfs.conflist)"),
+       classes => if_repaired("hdfsconf_shared");
+##
+    namenode::
+      # "$(hdfs.formatdfs) > $(sys.logdir)/hdfs.formatted"
+      "$(hdfs.formatdfs)"
+      handle     => "format_hdfs_namenode",
+      comment    => "format Name Node",
+      contain    => in_shell,
+      ifvarclass => and(filesexist("@(hdfs.conflist)"),fileexists("$(hdfs.namenode_name_dir)"),not(fileexists("$(hdfs.namenode_name_dir)/current/VERSION"))),
+      # ifvarclass => and(filesexist("@(hdfs.conflist)"),fileexists("$(hdfs.namenode_name_dir)"),not(fileexists("$(sys.logdir)/hdfs.formatted"))),
+      # ifvarclass => not(fileexists("$(sys.logdir)/hdfs.formatted")),
+      classes    => if_repaired("hdfs_formatted");
+##
+    # hadoopconf_moded|hadoopconf_nn_moded::
+    hdfsed::
+       "$(hdfs.alterins) > $(sys.logdir)/alter.insed"
+       comment => "install alternatives on each node to point to $(hdfs.hadoop_confdir)",
+       contain => in_shell,
+       # ifvarclass => not(filesexist("$(sys.logdir)/alter.insed")),
+       ifvarclass => and(filesexist("@(hdfs.conflist)"),not(fileexists("$(sys.logdir)/alter.insed"))),
+       classes => if_repaired("alter_insed");
+##
+    # alter_insed::
+    hdfsed::
+       "$(hdfs.alterset) > $(sys.logdir)/alter.set"
+       comment => "set alternatives on each node to point to $(hdfs.hadoop_confdir)",
+       contain => in_shell,
+       ifvarclass => and(filesexist("@(hdfs.conflist)"),fileexists("$(sys.logdir)/alter.insed"),not(fileexists("$(sys.logdir)/alter.set"))),
+       classes => if_repaired("alter_set");
+##
+### - /tmp is already good at centos_6
+#     service_namenode_enabled::
+#        "$(hdfs.mktmp)"
+#        contain => in_shell,
+#        # ifvarclass => fileexists("/tmp"), ## TODO - get know where this /tmp is ?
+#        classes => if_repaired("tmpmaked");
+#
+#     tmpmaked::
+#       "$(hdfs.chmodtmp)"
+#       contain => in_shell,
+#       # ifvarclass => isdir("/tmp"), ## TODO - use filestat or smth
+#       classes => if_repaired("tmpchmoded");
+##
+##
+  services:
+    namenode::
+      "$(seron_nn)"
+      handle         => "enable_services_namenode",
+      comment        => "Services 2 ON at Name Node",
+      classes        => if_repaired("service_namenode_enabled"),
+      ifvarclass     => and(fileexists("$(sys.logdir)/alter.set"),fileexists("$(hdfs.namenode_name_dir)/current/VERSION")),
+      service_policy => "start";
+##
+    secondnnode::
+      "$(seron_snn)"
+      handle         => "enable_services_secondnamenode",
+      comment        => "Services 2 ON at Second Name Node",
+      classes        => if_repaired("service_secondnamenode_enabled"),
+      # ifvarclass     => fileexists("$(sys.logdir)/alter.set"),
+      ifvarclass     => and(fileexists("$(sys.logdir)/alter.set"),fileexists("$(hdfs.namenode_checkpoint_dir)"),fileexists("$(hdfs.checkpoint_edits_dir)")),
+      service_policy => "start";
+##
+    datanode::
+      "$(seron_dn)"
+      handle         => "enable_services_datanode",
+      comment        => "Services 2 ON at Data Node",
+      classes        => if_repaired("service_datanode_enabled"),
+      ifvarclass     => and(fileexists("$(sys.logdir)/alter.set"),fileexists("$(hdfs.datanode_data_dir)/current/VERSION")),
+      service_policy => "start";
+##
+    jobtracker::
+      "$(seron_jt)"
+      handle         => "enable_services_jobtracker",
+      comment        => "Services 2 ON at jobtracker",
+      classes        => if_repaired("service_jobtracker_enabled"),
+      ifvarclass     => fileexists("$(sys.logdir)/alter.set"),
+      service_policy => "start";
+##
+    journalnode::
+      "$(seron_jt)"
+      handle         => "enable_services_journalnode",
+      comment        => "Services 2 ON at journalnode",
+      classes        => if_repaired("service_journal_enabled"),
+      ifvarclass     => fileexists("$(sys.logdir)/alter.set"),
+      service_policy => "start";
+##
+    maphistnode::
+      "$(seron_jt)"
+      handle         => "enable_services_mapreduce_historyserver",
+      comment        => "Services 2 ON at mapreduce historyserver",
+      classes        => if_repaired("service_historyserver_enabled"),
+      ifvarclass     => fileexists("$(sys.logdir)/alter.set"),
+      service_policy => "start";
+##
+##
+  reports:
+    hadoopconf_moded::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.hadoop_confdir) is chmoded by $(this.bundle)";
+    dfs_created::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.dfsdir) is created by $(this.bundle)";
+    nn_created::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.namenode_name_dir) is created by $(this.bundle)";
+    snn_created::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.namenode_checkpoint_dir) is created by $(this.bundle)";
+    snned_created::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.checkpoint_edits_dir) is created by $(this.bundle)";
+    dn_created::
+      "$(sys.date) $(sys.uqhost) folder $(hdfs.datanode_data_dir) is created by $(this.bundle)";
+    hdfs_formatted::
+      "$(sys.date) $(sys.uqhost) namenode is formatted by $(this.bundle)";
+    hdfsconf_shared::
+      "$(sys.date) $(sys.uqhost) hdfs config folder is shared by $(this.bundle)";
+    alter_insed::
+      "$(sys.date) $(sys.uqhost) alternatives for hadoop has been installed by $(this.bundle)";
+    alter_set::
+      "$(sys.date) $(sys.uqhost) alternatives for hadoop has been set by $(this.bundle)";
+    service_namenode_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_nn) is enabled by $(this.bundle)";
+    service_secondnamenode_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_snn) is enabled by $(this.bundle)";
+    service_datanode_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_dn) is enabled by $(this.bundle)";
+    service_jobtracker_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_jt) is enabled by $(this.bundle)";
+    service_tasktracker_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_tt) is enabled by $(this.bundle)";
+    service_journal_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_jn) is enabled by $(this.bundle)";
+    service_historyserver_enabled::
+      "$(sys.date) $(sys.uqhost) service $(seron_hs) is enabled by $(this.bundle)";
+
+}

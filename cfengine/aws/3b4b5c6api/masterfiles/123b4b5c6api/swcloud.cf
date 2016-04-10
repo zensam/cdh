@@ -1,0 +1,101 @@
+###################################################
+# /var/cfengine/masterfiles/123b4b5c6api/swcloud.cf
+###################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "swcloud" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent swcloud
+{
+  vars:
+      "nn_soft"  string => "hadoop-hdfs-namenode";
+      "snn_soft" string => "hadoop-hdfs-secondarynamenode";
+      "dn_soft"   slist => { "hadoop-hdfs-datanode", "hadoop-0.20-mapreduce-tasktracker", "hadoop-doc" };
+      "jt_soft"  string => "hadoop-0.20-mapreduce-jobtracker";
+      "jn_soft"  string => "hadoop-hdfs-journalnode";
+      "mh_soft"  string => "hadoop-mapreduce-historyserver";
+####
+  packages:
+    # Install packages from nn_soft to NameNode
+    # using policy "add" to avoid casual updating
+    zoook.namenode::
+      "${nn_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("namenode_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from snn_soft to secondary name node
+    # using policy "add" to avoid casual updating
+    (zoochok|zoook).secondnnode::
+      "${snn_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("secondnamenode_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from dn_soft to datanode
+    # using policy "add" to avoid casual updating
+    (zoochok|zoook).datanode::
+      "${dn_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("datanode_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from jt_soft to jobtrackers
+    # using policy "add" to avoid casual updating
+    (zoochok|zoook).jobtracker::
+      "${jt_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("jobtracker_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from jn_soft to journal nodes
+    # using policy "add" to avoid casual updating
+    (zoochok|zoook).journalnode::
+      "${jn_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("journalnode_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from mh_soft to mapreduce historyserver
+    # using policy "add" to avoid casual updating
+    (zoochok|zoook).maphistnode::
+      "${mh_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("maphistnode_soft_installed"),
+      package_method => yum;
+##
+    # Install packages from kdc_soft to the kerberos servers
+    kdcs::
+      "${kdc_soft}"
+      package_policy => "add",
+      # ifvarclass => filesexist("@(cfrepos.repos)"),
+      classes => if_repaired("kdcs_soft_installed"),
+      package_method => yum;
+####
+  reports:
+    namenode_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.nn_soft) installed by $(this.bundle)";
+    secondnamenode_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.snn_soft) installed by $(this.bundle)";
+    datanode_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.dn_soft) installed by $(this.bundle)";
+    jobtracker_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.jt_soft) installed by $(this.bundle)";
+    journalnode_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.jn_soft) installed by $(this.bundle)";
+    maphistnode_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.mh_soft) installed by $(this.bundle)";
+    kdcs_soft_installed::
+      "$(sys.date) $(sys.uqhost) package $(swcloud.kdc_soft) installed by $(this.bundle)";
+
+}

@@ -1,0 +1,121 @@
+#####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/zookeeper.cf
+#####################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "zookeeper" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent zookeeper
+{
+  vars:
+    # any::
+    redhat::
+      "zoo1"     string => "node1.$(def.domain)";
+      "zoo2"     string => "node2.$(def.domain)";
+      "zoo3"     string => "node3.$(def.domain)";
+      # "zoo4"     string => "node4.$(def.domain)";
+      # "zoo5"     string => "node5.$(def.domain)";
+      "zooch[1]"   string => "zoo_1.check";
+      "zooch[2]"   string => "zoo_2.check";
+      "zooch[3]"   string => "zoo_3.check";
+      # "zooch[4]"   string => "zoo_4.check";
+      # "zooch[5]"   string => "zoo_5.check";
+      "zoochecks"   slist => { "$(nfscl.mntnfs)/$(zookeeper.zooch[1])", "$(nfscl.mntnfs)/$(zookeeper.zooch[2])", "$(nfscl.mntnfs)/$(zookeeper.zooch[3])" }; # TODO - iterate trough zooch[x]
+
+    # zoonode::
+      "zoo_soft" string => "zookeeper-server";
+      "zooid"    string => execresult("/bin/echo $(sys.uqhost) | /bin/grep -o '[0-9]*'", "useshell");
+      "zoodir"   string => "/var/lib/zookeeper";
+      # "zoocheck" string => "/usr/bin/zookeeper-client -server node$(zookeeper.zooid).$(def.domain):2181 quit";
+      # zookeeper files
+      # "files[zoocfg]" string => "/etc/zookeeper/conf/zoo.cfg";
+      "zoocfg" string => "/etc/zookeeper/conf/zoo.cfg";
+      "zoopid" string => "/var/run/zookeeper/zookeeper-server.pid";
+      # Options to set
+      "zooops[maxClientCnxns]" string => "50";
+      "zooops[tickTime]"       string => "2000";
+      "zooops[dataDir]"        string => "$(zookeeper.zoodir)";
+      "zooops[dataLogDir]"     string => "$(zookeeper.zoodir)";
+      "zooops[clientPort]"     string => "2181";
+      "zooops[initLimit]"      string => "10";
+      "zooops[syncLimit]"      string => "5";
+      "zooops[server.1]"       string => "$(zookeeper.zoo1):2888:3888";
+      "zooops[server.2]"       string => "$(zookeeper.zoo2):2888:3888";
+      "zooops[server.3]"       string => "$(zookeeper.zoo3):2888:3888";
+      # "zooops[server.4]"       string => "$(zookeeper.zoo4):2888:3888";
+      # "zooops[server.5]"       string => "$(zookeeper.zoo5):2888:3888";
+
+    macloud::
+      "zoochlst"  slist => { "$(def.cfshare)/$(zookeeper.zooch[1])", "$(def.cfshare)/$(zookeeper.zooch[2])", "$(def.cfshare)/$(zookeeper.zooch[3])" }; # TODO - iterate trough zooch[x]
+      # "zoochlst"  slist => { "$(def.cfshare)/$(zookeeper.zooch[1])", "$(def.cfshare)/$(zookeeper.zooch[2])", "$(def.cfshare)/$(zookeeper.zooch[3])" };
+
+  files:
+    zoonode::
+      # "$(zookeeper.files[zoocfg])"
+      "$(zookeeper.zoocfg)"
+      comment       => "Make sure zoo.cfg contains desired configuration settings",
+      handle        => "edit_zoo_cfg",
+      perms         => mog("644","zookeeper","zookeeper"),
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      edit_line     => set_variable_values("zookeeper.zooops"),
+      ifvarclass    => and(userexists("zookeeper"), groupexists("zookeeper")),
+      classes       => if_repaired("zoocfg_edited");
+
+    zoonode::
+      "$(nfscl.mntnfs)/zoo_$(zookeeper.zooid).check"
+      comment       => "Flag file for namenode to be sure zookeeper installed",
+      # perms         => mog("0644","zookeeper","zookeeper"),
+      create        => "true",
+      edit_defaults => no_backup,
+      edit_line     => append_if_no_line("$(sys.fqhost) - zookeeper at zoo$(zookeeper.zooid) server is OK"),
+      ifvarclass    => and(fileexists("/var/lib/zookeeper/myid"),fileexists("$(zookeeper.zoopid)"),fileexists("$(nfscl.mntnfs)/nfsflag")),
+      # ifvarclass    => fileexists("/var/lib/zookeeper/myid"),
+      classes       => if_repaired("zoo_checked");
+
+  packages:
+    # Install packages from zoo_soft to odd number of zookeeper hosts
+    # using policy "add" to avoid casual updating
+    zoonode::
+      "${zoo_soft}"
+      package_policy => "add",
+      package_method => yum;
+
+  commands:
+    zoonode::
+      "/sbin/service zookeeper-server init --myid=$(zookeeper.zooid) --force"
+      # "/sbin/service zookeeper-server init --myid=$(zookeeper.zooid)"
+      contain => in_shell,
+      ifvarclass => and(userexists("zookeeper"),not(fileexists("$(zookeeper.zoodir)/myid"))),
+      classes => if_repaired("zoooinited");
+
+  services:
+    # zoocfg_edited::
+    zoonode::
+      "zookeeper-server"
+      ifvarclass     => fileexists("$(zookeeper.zoodir)/myid"),
+      service_policy => "start",
+      classes        => if_repaired("service_zookeeper_server_enabled");
+
+    redhat.!zoonode::
+      "zookeeper-server"
+      service_policy => "disable",
+      classes        => if_repaired("service_zookeeper_server_disabled");
+
+  reports:
+    zoocfg_edited::
+      "$(sys.date) $(sys.uqhost) /etc/zookeeper/conf/zoo.cfg has been edited by $(this.bundle)";
+    zoo_checked::
+      "$(sys.date) $(sys.uqhost) check file $(nfscl.mntnfs)/zoo_$(zookeeper.zooid).check has been placed in $(nfscl.mntnfs) by $(this.bundle)";
+    zooinited::
+      "$(sys.date) $(sys.uqhost) zookeeper-server initialized by $(this.bundle)";
+    service_zookeeper_server_enabled::
+      "$(sys.date) $(sys.uqhost) service zookeeper-server is enabled by $(this.bundle)";
+    service_zookeeper_server_disabled::
+      "$(sys.date) $(sys.uqhost) service zookeeper-server is disabled by $(this.bundle)";
+
+}

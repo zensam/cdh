@@ -1,0 +1,38 @@
+###################################################
+# /var/cfengine/masterfiles/123b4b5b6api/pipmods.cf
+###################################################
+#
+# Python additional modules installation
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "pipmods" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent pipmods
+{
+  vars:
+    macloud|cloudnode::
+      "pythonmods"  slist => { "selenium" };
+      "cm_api_ver" string => "9.0.0";
+      "cm_api"     string => execresult("$(paths.pip) list | $(paths.grep) cm-api | $(paths.awk) \'{print $2}\' | $(paths.tr) -d \'()\'", "useshell");
+
+  # classes:
+      # "no_cmapi9" not => strcmp("$(cm_api_ver)","$(cm_api)");
+
+  packages:
+    macloud|cloudnode::
+      "$(pythonmods)"
+      package_method => pip(""),
+      package_policy => "addupdate";
+
+  commands:
+    macloud|cloudnode::
+      "$(paths.pip) install -I cm_api==$(pipmods.cm_api_ver)"
+      contain    => in_shell,
+      ifvarclass => not(strcmp("$(is_cm_api_9)", "$(cm_api_ver)")),
+      comment    => "Install cm-api python module of needed version";
+
+}

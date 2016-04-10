@@ -1,0 +1,17 @@
+http://www.cloudera.com/content/cloudera/en/documentation/core/latest/images/cm_install_phases.jpg
+
+Phase 1: Install JDK.
+
+Phase 2: Set up DB's.
+
+Phase 3(B): Install server. yum install cloudera-manager-server cloudera-manager-daemons
+                            edit /etc/cloudera-scm-server/db.properties
+                            service cloudera-manager-server start
+
+Phase 4(B): Install Agents. yum install cloudera-manager-agent cloudera-manager-daemons
+                            edit config.ini
+                            service cloudera-manager-agent start
+
+Phase 5(C): Install CDH and Managed Service SW. yum install hadoop zookeeper hue oozie ...
+
+Phase 6(API): Create, Configure, and Start CDH and Managed Services. POST /api/<version>/cm/deployment

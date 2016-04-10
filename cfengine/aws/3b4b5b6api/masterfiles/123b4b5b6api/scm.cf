@@ -1,0 +1,79 @@
+###########################################
+# /var/cfengine/masterfiles/123b4b5b/scm.cf
+###########################################
+#
+# Cloudera-scm-agent configuration, to subordinate nodes to master
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "scm" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent scm
+{
+  vars:
+      # Cloudera Service management server address
+      "server" string => "cloudera.$(def.domain)";
+
+      # Files to edit
+      "files[agconfig]" string => "/etc/cloudera-scm-agent/config.ini";
+
+      # Options to set
+      "nodeops[server_host]" string => "$(scm.server)";
+      "nodeops[server_port]" string => "7182";
+###
+  methods:
+    cloudnode::
+      "scmagent" usebundle => scm_agent,
+      comment => "Configure cloudera-scm-agent at nodes";
+##
+    macloud.amazon:: # using fake class (amazon) to avoid execution of the method
+      "pgsql_lock" usebundle => pgsqllock,
+      comment => "workaround for Amazon Linux - change permission for PostgreSQL lock directory";
+
+}
+####
+bundle agent scm_agent
+{
+  files:
+      "$(scm.files[agconfig])"
+      handle        => "edit_agent_config_ini",
+      comment       => "Make sure config.ini contains desired configuration settings",
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      edit_line     => set_variable_values("scm.nodeops"),
+      classes       => if_repaired("agconfig_edited");
+###
+  commands:
+    agconfig_edited::
+      "$(paths.service) cloudera-scm-agent restart"
+      # contain => in_shell,
+      handle  => "reload_scm_agent",
+      comment => "Apply new cloudera agent settings";
+###
+  reports:
+    agconfig_edited::
+      "$(sys.date) $(sys.uqhost) Reloading cloudera-scm-agent";
+}
+####
+bundle agent pgsqllock
+{
+  classes:
+    macloud::
+      "scm_user" and => { userexists("cloudera-scm"),groupexists("postgres") };
+###
+  files:
+      "/var/run/postgresql/."
+      create        => "false",
+      edit_defaults => no_backup,
+      perms         => m("755"),
+      comment       => "change permission for PostgreSQL lock directory";
+###
+  commands:
+    scm_user::
+      "/usr/sbin/usermod -G postgres -a cloudera-scm"
+      # contain => in_shell,
+      comment => "Include cloudera-scm user into postgres group";
+}

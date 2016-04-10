@@ -1,0 +1,86 @@
+##############################################
+# /var/cfengine/masterfiles/123b4b5b/nameip.cf
+##############################################
+#
+# Generating /etc/hosts file at policy server and distribute it to all linux hosts by confiles.cf
+# next 3 bundles works at policy_server only
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "nameip", };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent nameip
+{
+  vars:
+    policy_server::
+      "creds"     string => "--user admin:qwer1234";
+      "hostsjson" string => "/tmp/hosts.json";
+      ## All variants of curlcmd are correct:
+      # "curlcmd"   string => "$(paths.curl) -k $(creds) https://$(sys.fqhost)/api/host";
+      "curlcmd"   string => "$(paths.curl) -k $(creds) https://$(sys.fqhost)/api/host &> /dev/null";
+      # "curlcmd"   string => "$(paths.curl) -k $(creds) https://$(sys.fqhost)/api/host?context-include=linux.*";
+      # "curlcmd"   string => "$(paths.curl) -k $(creds) https://$(sys.policy_hub)/api/host &> /dev/null";
+
+  commands:
+    policy_server::
+      "$(curlcmd) > $(hostsjson)"
+      contain => in_shell;
+
+  methods:
+    policy_server::
+      "edithosts" usebundle => edit_hosts,
+                    comment => "Configure /etc/hosts";
+    policy_server::
+      "copyhosts" usebundle => copy_hosts,
+                    comment => "Copy /etc/hosts to $(vc.cfetcsrc)";
+
+}
+
+bundle agent edit_hosts
+{
+
+  files:
+    policy_server::
+      "$(vc.hostsfile)"
+      create          => "true",
+      perms           => mog("644","root","root"),
+      template_method => "mustache",
+      template_data   => readjson("$(nameip.hostsjson)", 999999),
+      edit_template   => "$(vc.cfetcsrc)/hosts.mustache",
+      ifvarclass      => fileexists("$(nameip.hostsjson)"),
+      classes         => if_repaired("hosts_edited");
+
+  reports:
+    hosts_edited::
+      "$(sys.date) $(sys.uqhost) the $(vc.hostsfile) is generated from $(nameip.hostsjson) ";
+
+}
+
+
+# Put generated "/etc/hosts" file to $(vc.cfetcsrc)
+bundle agent copy_hosts
+{
+  files:
+    policy_server::
+      "$(vc.cfetcsrc)/hosts.txt"
+      comment   => "Copy hosts file generated from json to $(vc.cfetcsrc)",
+      perms     => mog("644","root","root"),
+      copy_from => local_cp("$(vc.hostsfile)"),
+      classes   => if_repaired("hosts_to_cfetcsrc");
+
+    policy_server::
+      "$(def.cfshare)/hosts"
+      comment   => "Copy hosts file generated from json to $(def.cfshare)",
+      perms     => mog("644","cfapache","cfapache"),
+      copy_from => local_cp("$(vc.hostsfile)"),
+      classes   => if_repaired("hosts_to_cfshare");
+
+  reports:
+    hosts_to_cfetcsrc::
+      "$(sys.date) $(sys.uqhost) file \"$(vc.hostsfile)\" is copied to \"$(vc.cfetcsrc)/hosts.txt\"";
+    hosts_to_cfshare::
+      "$(sys.date) $(sys.uqhost) file \"$(vc.hostsfile)\" is copied to \"$(def.cfshare)/hosts\"";
+}

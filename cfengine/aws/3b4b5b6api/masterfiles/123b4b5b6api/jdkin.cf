@@ -1,0 +1,131 @@
+#################################################
+# /var/cfengine/masterfiles/123b4b5b6api/jdkin.cf
+#################################################
+#
+# Install JDK
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "jdkin" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent jdkin
+{
+  vars:
+    macloud|cloudnode::
+      "jdkarch"  string => "jdk-7u79-linux-x64";
+      "jdkver"   string => "jdk1.7.0_79";
+      "poldir"   string => "UnlimitedJCEPolicyJDK7";
+      "oklink"   string => "/usr/java/jdk1.7.0_79/jre/bin/java";
+      "linkedto" string => filestat("/etc/alternatives/java", "linktarget_shallow");
+###
+  classes:
+    macloud|cloudnode::
+      "nojdk"            not => fileexists("/usr/java/$(jdkin.jdkver)"); # no java of needed version installed
+      "altok"     expression => strcmp("$(oklink)","$(linkedto)");       # java alternatives is OK
+      "altislink" expression => islink("/etc/alternatives/java");        # is there link to any java in /etc/alternatives
+###
+  # files:
+    # !altislink::
+      # "/etc/alternatives/java"
+      # link_from  => ln_s("$(jdkin.oklink)"),
+      # ifvarclass => fileexists("/usr/java/$(jdkin.jdkver)/jre/bin/java");
+###
+  commands:
+    macloud|cloudnode::
+      "$(paths.yum) remove -y jdk-1.7.0_80"
+      # contain    => in_shell,
+      ifvarclass => fileexists("/usr/java/jdk1.7.0_80)"),
+      classes    => if_repaired("jdk1_7_0_80_removed"),
+      comment    => "uninstall jdk-1.7.0_80 if installed";
+##
+   macloud|cloudnode::
+      "$(paths.yum) remove -y jdk-1.6.0_31"
+      # contain    => in_shell,
+      ifvarclass => fileexists("/usr/java/jdk1.6.0_31)"),
+      classes    => if_repaired("jdk1_6_0_31_removed"),
+      comment    => "uninstall jdk-1.6.0_31 if installed";
+##
+    (macloud|cloudnode).nojdk::
+      "$(paths.wget) -O $(sys.workdir)/$(jdkarch).rpm --no-check-certificate -q -c --header \"Cookie: oraclelicense=accept-securebackup-cookie\" http://download.oracle.com/otn-pub/java/jdk/7u79-b15/$(jdkin.jdkarch).rpm"
+      contain    => in_shell,
+      classes    => if_repaired("jdkwgeted"),
+      ifvarclass => not(fileexists("$(sys.workdir)/$(jdkarch).rpm")),
+      comment    => "Download $(jdkin.jdkarch.rpm) from oracle.com";
+##
+    # jdkwgeted::
+    nojdk::
+      "$(paths.yum) -yt localinstall $(sys.workdir)/$(jdkarch).rpm"
+      #"$(paths.rpm) -Uh $(sys.workdir)/$(jdkarch).rpm"
+      contain    => in_shell,
+      classes    => if_repaired("jdkinsed"),
+      ifvarclass => fileexists("$(sys.workdir)/$(jdkarch).rpm");
+##
+    macloud|cloudnode::
+      "$(paths.wget) --quiet -O $(sys.workdir)/$(jdkin.poldir).zip https://s3-eu-west-1.amazonaws.com/<mycompany-aws-resource>/$(jdkin.poldir).zip"
+      contain    => in_shell,
+      classes    => if_repaired("policy_wgeted"),
+      ifvarclass => not(fileexists("$(sys.workdir)/$(jdkin.poldir).zip"));
+##
+    macloud|cloudnode::
+      "/usr/bin/unzip -o $(sys.workdir)/$(jdkin.poldir).zip -d /tmp"
+      contain    => in_shell,
+      classes    => if_repaired("policy_unzipped"),
+      ifvarclass => and(fileexists("$(sys.workdir)/$(jdkin.poldir).zip"),not(fileexists("/tmp/UnlimitedJCEPolicy")));
+##
+    macloud|cloudnode::
+      "/bin/rm -f /usr/java/$(jdkver)/jre/lib/security/US_export_policy.jar /usr/java/$(jdkver)/jre/lib/security/local_policy.jar &> $(sys.logdir)/state/old_jdk_pols.log"
+      contain    => in_shell,
+      classes    => if_repaired("old_policies_removed"),
+      ifvarclass => and(fileexists("/usr/java/$(jdkin.jdkver)/jre/lib/security/US_export_policy.jar"),not(fileexists("$(sys.logdir)/state/old_jdk_pols.log")));
+##
+    macloud|cloudnode::
+      "/bin/cp -f /tmp/UnlimitedJCEPolicy/US_export_policy.jar /usr/java/$(jdkin.jdkver)/jre/lib/security/"
+      contain    => in_shell,
+      classes    => if_repaired("uspol_insed"),
+      ifvarclass => and(fileexists("$(sys.logdir)/state/old_jdk_pols.log"),not(fileexists("/usr/java/$(jdkin.jdkver)/jre/lib/security/US_export_policy.jar")));
+##
+    macloud|cloudnode::
+      "/bin/cp -f /tmp/UnlimitedJCEPolicy/local_policy.jar /usr/java/$(jdkin.jdkver)/jre/lib/security/"
+      contain    => in_shell,
+      classes    => if_repaired("locpol_insed"),
+      ifvarclass => and(fileexists("$(sys.logdir)/state/old_jdk_pols.log"),not(fileexists("/usr/java/$(jdkin.jdkver)/jre/lib/security/local_policy.jar")));
+##
+    macloud|cloudnode::
+      "/usr/sbin/alternatives --install /usr/bin/java java /usr/java/$(jdkin.jdkver)/jre/bin/java 3"
+      contain    => in_shell,
+      ifvarclass => not(strcmp("$(oklink)","$(linkedto)")),
+      classes    => if_repaired("alter_insed");
+##
+    alter_insed::
+    # macloud|cloudnode::
+      "/usr/sbin/alternatives --set java /usr/java/$(jdkin.jdkver)/jre/bin/java"
+      contain    => in_shell,
+      # ifvarclass => not(strcmp("$(oklink)","$(linkedto)")),
+      classes    => if_repaired("alter_set");
+###
+   reports:
+     nojdk::
+       "$(sys.date) $(sys.uqhost) java of needed version is not installed";
+     altok::
+       "$(sys.date) $(sys.uqhost) java alternatives is OK";
+     altislink::
+       "$(sys.date) $(sys.uqhost) /etc/alternatives has link named java";
+     jdkinsed::
+       "$(sys.date) $(sys.uqhost) $(jdkarch).rpm has been installed to /usr/java/$(jdkver) by $(this.bundle)";
+     policy_wgeted::
+       "$(sys.date) $(sys.uqhost)  has been removed";
+     old_policies_removed::
+       "$(sys.date) $(sys.uqhost) default US_export_policy.jar and local_policy.jar has been removed";
+     uspol_insed::
+       "$(sys.date) $(sys.uqhost) US_export_policy.jar has been changed by $(this.bundle)";
+     locpol_insed::
+       "$(sys.date) $(sys.uqhost) local_policy.jar has been changed by $(this.bundle)";
+     alter_insed::
+       "$(sys.date) $(sys.uqhost) alternatives for java has been installed by $(this.bundle)";
+     alter_set::
+       "$(sys.date) $(sys.uqhost) alternatives for java has been set by $(this.bundle)";
+
+}

@@ -1,0 +1,56 @@
+#####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/confcloud.cf
+#####################################################
+#
+# Cloudera-scm-agent configuration, to subordinate nodes to master
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "confcloud" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent confcloud
+{
+  vars:
+      # Cloudera master server address
+      "cloudmaster"          string => "cloudera.$(def.domain)";
+      # "secondnamenode"       string => "node1.$(def.domain)";
+
+      # Files to edit
+      "files[agconfig]"      string => "/etc/cloudera-scm-agent/config.ini";
+
+      # Options to set
+      "nodeops[server_host]" string => "$(cloudmaster)";
+      "nodeops[server_port]" string => "7182";
+
+  methods:
+    cloudnode|macloud::
+      "nodeagent" usebundle => node_agent,
+                    comment => "Configure cloudera-scm-agent at nodes";
+}
+
+bundle agent node_agent
+{
+  files:
+      "$(confcloud.files[agconfig])"
+        handle        => "edit_agent_config_ini",
+        comment       => "Make sure config.ini contains desired configuration settings",
+        create        => "false",
+        edit_defaults => backup_timestamp,
+        edit_line     => set_variable_values("confcloud.nodeops"),
+        classes       => if_repaired("agconfig_edited");
+
+  commands:
+    agconfig_edited::
+       "$(paths.service) cloudera-scm-agent restart"
+       contain => in_shell,
+       handle  => "reload_scm_agent",
+       comment => "Apply new cloudera agent settings";
+
+  reports:
+    agconfig_edited::
+       "$(sys.date) $(sys.uqhost) Reloading cloudera-scm-agent";
+
+}

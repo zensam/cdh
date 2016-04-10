@@ -1,0 +1,91 @@
+##################################################
+# /var/cfengine/masterfiles/123b4b5c6api/rpmsin.cf
+##################################################
+#
+# Package based variant for cloudera installation
+# DO NOT USE with parcels
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "rpmsin" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent rpmsin
+{
+  vars:
+    cloudnode|macloud::
+      "rpms_list"    slist => {
+                                "avro-tools",
+                                "crunch",
+                                "flume-ng",
+                                "hadoop-hdfs-fuse",
+                                "hadoop-hdfs-nfs3",
+                                "hadoop-httpfs",
+                                "hadoop-kms",
+                                "hbase-solr",
+                                "hive-hbase",
+                                "hive-webhcat",
+                                "hue-beeswax",
+                                "hue-hbase",
+                                "hue-impala",
+                                "hue-pig",
+                                "hue-plugins",
+                                "hue-rdbms",
+                                "hue-search",
+                                "hue-spark",
+                                "hue-sqoop",
+                                "hue-zookeeper",
+                                "impala",
+                                "impala-shell",
+                                "kite",
+                                "llama",
+                                "mahout",
+                                "oozie",
+                                "pig",
+                                "pig-udf-datafu",
+                                "search",
+                                "sentry",
+                                "solr-mapreduce",
+                                "spark-python",
+                                "sqoop",
+                                "sqoop2",
+                                "whirr",
+                                "zookeeper"
+                               };
+    cloudnode|macloud::
+      "servicelist"   slist => {
+                                # "flume-ng-agent",
+                                "hadoop-hdfs-nfs3",
+                                # "hadoop-kms-server",
+                                "hbase-solr-indexer",
+                                # "hive-webhcat-server",
+                                # "impala-catalog",
+                                # "impala-server",
+                                # "impala-state-store",
+                                # "llama",
+                                # "oozie",
+                                # "sentry-store",
+                                # "sqoop-metastore",
+                                # "sqoop2-server",
+                               };
+
+  packages:
+  # Install packages from rpms_list to all noded hosts
+  # for package based cloudera installation implemeting
+    cloudnode|macloud::
+      "${rpms_list}"
+      # package_policy => "addupdate",
+      package_policy => "add",
+      package_method => yum,
+      ifvarclass => "noded";
+
+  services:
+  # Disable unnecessary services
+    cloudnode|macloud::
+      "$(servicelist)"
+      comment        => "Services 2 OFF after rpms installation",
+      service_policy => "disable";
+
+}

@@ -1,0 +1,145 @@
+##################################################
+# /var/cfengine/masterfiles/123b4b5b6api/parcel.cf
+##################################################
+#
+# Cloudera parcels distribution
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "parcel" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent parcel
+{
+  vars:
+      # Files and folders
+      # parcel_dir=/opt/cloudera/parcel-repo
+      # parcel_cache=/opt/cloudera/parcel-cache
+      "cdh_dir"   string => "/opt/cloudera";
+      "repo_dir"  string => "$(cdh_dir)/parcel-repo";
+      "cache_dir" string => "$(cdh_dir)/parcel-cache";
+      "csddir"    string => "$(cdh_dir)/csd";
+      "workdir"   string => "$(cdh_dir)/parcels";
+      # "parceldirlst"      slist => { "$(cdh_dir)", "$(parcel_repo_dir)", "$(parcel_cache_dir)", "$(parcels_dir)" };
+      # "cdh_vers"   string => "latest";
+      "cdh_vers"   string => "5.3.4";
+      "cm_version" string => "5.3.4";
+      # "cdh5arch"   string => "CDH-5.4.4-1.cdh5.4.4.p0.4-el6.parcel";
+      "cdh5arch"   string => "CDH-5.3.4-1.cdh5.3.4.p0.4-el6.parcel";
+      "scmug"      string => "cloudera-scm";
+
+  methods:
+    cloudnode|macloud::
+      "getparcels" usebundle => getpars,
+      ifvarclass => and(userexists("cloudera-scm"),groupexists("cloudera-scm")),
+      comment => "Get parcels";
+
+}
+bundle agent getpars
+{
+  vars:
+      # "cdh5el6url" string => "http://$(vc.yum_hub)/dist/cloudera/cdh5/parcels/$(parcel.cdh_vers)/$(parcel.cdh5arch)";
+      "cdh5el6url" string => "http://archive.cloudera.com/cdh5/parcels/$(parcel.cdh_vers)/$(parcel.cdh5arch)";
+      "wget_cdh"   string => "$(paths.wget) --no-check-certificate --tries=2 -q -c -P";
+      "get_sha1"   string => "/usr/bin/sha1sum $(parcel.repo_dir)/$(parcel.cdh5arch)";
+      "sudo_scm"   string => "/usr/bin/sudo -u $(parcel.scmug)";
+      # "wget_sha"   string => "$(paths.wget) -q -O $(parcel.repo_dir)/$(parcel.cdh5arch).sha $(getpars.cdh5el6url).sha1";
+      # "wget_sha1"  string => "$(paths.wget) -q -O $(parcel.repo_dir)/$(parcel.cdh5arch).sha1 $(getpars.cdh5el6url).sha1";
+###
+  files:
+      "$(parcel.cdh_dir)/."
+      perms      => mog("755", "root", "root"),
+      create     => "true",
+      ifvarclass => not(fileexists("$(parcel.cdh_dir)")),
+      classes    => if_repaired("cdh_dir_created");
+##
+      "$(parcel.cache_dir)/."
+      perms      => mog("755", "root", "root"),
+      create     => "true",
+      ifvarclass => not(fileexists("$(parcel.cache_dir)")),
+      classes    => if_repaired("repo_dir_created");
+##
+    macloud::
+      "$(parcel.repo_dir)/."
+      perms      => mog("755", "$(parcel.scmug)", "$(parcel.scmug)"),
+      create     => "true",
+      ifvarclass => not(fileexists("$(parcel.repo_dir)")),
+      classes    => if_repaired("repo_dir_created");
+##
+    macloud::
+      "$(parcel.csddir)/."
+      perms      => mog("755", "$(parcel.scmug)", "$(parcel.scmug)"),
+      create     => "true",
+      ifvarclass => not(fileexists("$(parcel.csddir)")),
+      classes    => if_repaired("csddir_created");
+##
+    macloud::
+      "$(parcel.cache_dir)/$(parcel.cdh5arch)"
+      comment       => "Copy parcel from parcel-repo to parcle-cache",
+      perms         => mog("0644","root","root"),
+      edit_defaults => no_backup,
+      ifvarclass    => and(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch)"),not(fileexists("$(parcel.cache_dir)/$(parcel.cdh5arch)"))),
+      copy_from     => local_cp("$(parcel.repo_dir)/$(parcel.cdh5arch)");
+###
+  commands:
+    macloud::
+      "$(paths.wget) -q -O $(parcel.repo_dir)/$(parcel.cdh5arch).sha $(getpars.cdh5el6url).sha1"
+      comment    => "Download cdh parcel sha1 checksum file an save it as .sha in parcel-repo",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch).sha")));
+##
+    macloud::
+      "$(paths.wget) -q -O $(parcel.repo_dir)/$(parcel.cdh5arch).sha1 $(getpars.cdh5el6url).sha1"
+      comment    => "Download cdh parcel sha1 checksum file an save it as .sha1 in parcel-repo",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch).sha1")));
+##
+    macloud::
+      "$(getpars.sudo_scm) $(getpars.wget_cdh) $(parcel.repo_dir) $(getpars.cdh5el6url)"
+      comment    => "Download cdh parcel into repo directory",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch)"))),
+      classes    => if_repaired("cdh5arch_repoed");
+##
+    cdh5arch_repoed::
+      "$(getpars.sudo_scm) $(getpars.get_sha1) $(parcel.repo_dir)/$(parcel.cdh5arch) > $(parcel.repo_dir)/$(parcel.cdh5arch).sha1sum"
+      comment    => "get SHA1 sum of downloaded archive",
+      contain    => in_shell,
+      ifvarclass => and(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch)"),not(fileexists("$(parcel.repo_dir)/$(parcel.cdh5arch).sha1sum"))),
+      classes    => if_repaired("cdh5arch_summed");
+##
+    cloudnode::
+      "$(getpars.wget_cdh) $(parcel.cache_dir) $(getpars.cdh5el6url)"
+      comment    => "Download cdh parcel into cache directory",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.cache_dir)/$(parcel.cdh5arch)"))),
+      classes    => if_repaired("cdh5arch_cached");
+##
+    cloudnode|macloud::
+      "$(paths.wget) -q -O $(parcel.cache_dir)/$(parcel.cdh5arch).sha $(getpars.cdh5el6url).sha1"
+      comment    => "Download cdh parcel sha1 checksum file an save it as .sha in parcel-cache",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.cache_dir)/$(parcel.cdh5arch).sha")));
+##
+    cloudnode|macloud::
+      "$(paths.wget) -q -O $(parcel.cache_dir)/$(parcel.cdh5arch).sha1 $(getpars.cdh5el6url).sha1"
+      comment    => "Download cdh parcel sha1 checksum file an save it as .sha1 in parcel-cache",
+      contain    => in_shell,
+      ifvarclass => and(userexists("$(parcel.scmug)"),not(fileexists("$(parcel.cache_dir)/$(parcel.cdh5arch).sha1")));
+###
+  reports:
+    cdh_dir_created::
+      "$(sys.date) $(sys.uqhost) folder $(parcel.cdh_dir) is created by $(this.bundle)";
+    repo_dir_created::
+      "$(sys.date) $(sys.uqhost) folder $(parcel.repo_dir) is created by $(this.bundle)";
+    cdh5arch_cached::
+      "$(sys.date) $(sys.uqhost) file $(parcel.cdh5arch) is downloaded to $(parcel.cache_dir) by $(this.bundle)";
+    cdh5arch_repoed::
+      "$(sys.date) $(sys.uqhost) file $(parcel.cdh5arch) is downloaded to $(parcel.repo_dir) by $(this.bundle)";
+    cdh5arch_summed::
+      "$(sys.date) $(sys.uqhost) sha1sum for $(parcel.cdh5arch) is created by $(this.bundle)";
+
+}
+

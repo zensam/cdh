@@ -1,0 +1,44 @@
+#################################################
+# /var/cfengine/masterfiles/123b4b5c6api/yumup.cf
+#################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "yumup" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent yumup
+{
+  vars:
+    "yumupcmd"       string => "/usr/bin/yum update -yt";
+
+  commands:
+    redhat.Sunday.Hr09::
+      "$(yumupcmd)"
+      ifvarclass => filesexist("@(cfrepos.repos)"),
+      contain => in_shell,
+      classes => cmd_repair(0, "updone");
+
+    updone::
+      "$(vc.yumclean)"
+      contain => in_shell,
+      classes => cmd_repair(0, "yumcled");
+
+#    centos_6.!6up::
+#      "$(yumupcmd) && /sbin/reboot"
+#      contain => in_shell;
+
+#    centos_7.!7up::
+#      "$(yumupcmd) && /usr/sbin/reboot"
+#      comment => "Update centos7 and reboot",
+#      contain => in_shell;
+
+  reports:
+    updone::
+      "$(sys.date)  $(sys.uqhost) OS is updated by $(this.bundle)";
+    yumcled::
+      "$(sys.date)  $(sys.uqhost) yum caches is cleaned by $(this.bundle)";
+
+}

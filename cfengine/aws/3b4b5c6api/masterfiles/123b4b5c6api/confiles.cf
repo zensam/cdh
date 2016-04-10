@@ -1,0 +1,357 @@
+####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/confiles.cf
+####################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "confiles" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent confiles
+{
+  vars:
+      # Configuration files master location
+      "cfetcdir" string => "/var/cfengine/inputs/qdbp/cfetc";
+##
+      # Files to edit
+      "files[sysctlconf]" string => "/etc/sysctl.conf";
+      "files[sshdconfig]" string => "/etc/ssh/sshd_config";
+      "files[inittab]"    string => "/etc/inittab";
+      "files[sudoers]"    string => "/etc/sudoers";
+      "files[wheel]"      string => "/etc/sudoers.d/wheel";
+      "files[supervisor]" string => "/etc/supervisord.conf";
+      "files[hosts]"      string => "/etc/hosts";
+      "files[netconfig]"  string => "/etc/netconfig";
+      "files[mcini]"      string => "/root/.mc/ini";
+##
+      # Midnight commander options to set
+      "mcops[navigate_with_arrows]" string => "1";
+      "mcops[safe_delete]"          string => "1";
+      "mcops[drop_menus]"           string => "1";
+      "mcops[base_color]"           string => "linux:normal=green,black:marked=yellow,black:input=,\
+green:menu=black:menusel=white:menuhot=red,:menuhotsel=black,red:dfocus=white,black:dhotnormal=white,\
+black:dhotfocus=white,black:executable=,black:directory=white,black:link=white,black:device=white,\
+black:special=white,black:core=,black:stalelink=red,black:editnormal=green,black";
+##
+      # Sysctl variables to set
+      "sysctlops[vm.swappiness]"                      string => "0";
+      "sysctlops[net.ipv4.ip_forward]"                string => "1";
+      "sysctlops[net.ipv6.conf.all.disable_ipv6]"     string => "1";
+      "sysctlops[net.ipv6.conf.default.disable_ipv6]" string => "1";
+##
+      # SSHD configuration to set
+      "sshdops[Protocol]"               string => "2";
+      "sshdops[X11Forwarding]"          string => "yes";
+      "sshdops[AddressFamily]"          string => "inet";
+      "sshdops[PermitEmptyPasswords]"   string => "no";
+      "sshdops[PermitRootLogin]"        string => "yes";
+      "sshdops[PasswordAuthentication]" string => "yes";
+      "sshdops[UseDNS]"                 string => "no";
+##
+  methods:
+      "mcini"     usebundle => mc_ini,
+      ifvarclass => fileexists("/root/.mc/ini"),
+                    comment => "Configure $(files[mcini])";
+      "sysctl"    usebundle => edit_sysctl,
+                    comment => "Configure $(files[sysctlconf])";
+      "sshd"      usebundle => edit_sshd,
+                    comment => "Configure $(files[sshdconfig])";
+      "inittab"   usebundle => edit_inittab,
+                    comment => "Configure $(files[inittab])";
+      "sshsudo"   usebundle => ssh_sudo,
+                    comment => "Append line to $(files[sshsuops])";
+      "wheelsu"   usebundle => wheel_sudoers,
+                    comment => "Copy template file to $(files[wheel])";
+      "disreqtty" usebundle => dis_reqtty,
+                    comment => "Comment line 'Defaults requiretty' in $(files[sudoers])";
+      "supvisord" usebundle => sup_visord,
+                    comment => "Copy template file to $(files[supervisor])";
+      "etchosts"  usebundle => etc_hosts,
+                    comment => "Copy template file to $(files[hosts])";
+      "netconfig" usebundle => net_config,
+                 ifvarclass => fileexists("$(files[netconfig])"),
+                    comment => "Comment lines matching \"inet6\" in $(files[netconfig])";
+      "nfsserver" usebundle => nfsser,
+                    comment => "Set nfs shares by $(sys.exports)";
+      "nfsclient" usebundle => nfscl,
+                    comment => "Connect to nfs shares by $(sys.fstab)";
+}
+####
+bundle agent mc_ini
+{
+  files:
+    linux::
+      "$(confiles.files[mcini])"
+        handle        => "edit_mcini",
+        create        => "false",
+        edit_defaults => no_backup,
+        edit_line     => set_variable_values("confiles.mcops");
+}
+####
+bundle agent edit_sysctl
+{
+  files:
+#    centos_6::
+    centos::
+      "$(confiles.files[sysctlconf])"
+        handle    => "edit_sysctl",
+        comment   => "Make sure sysctl.conf contains desired configuration settings",
+        create    => "true",
+        edit_line => set_variable_values("confiles.sysctlops"),
+        classes   => if_repaired("sysctl_modified");
+
+  commands:
+    sysctl_modified.!no_restarts::
+       "/sbin/sysctl -q -e -p"
+        handle  => "reload_sysctl",
+        comment => "Make sure new sysctl settings are loaded";
+  reports:
+    sysctl_modified.!no_restarts::
+       "$(sys.date) $(sys.uqhost) Reloading sysctl";
+}
+####
+bundle agent edit_sshd
+{
+  files:
+     centos::
+      "$(confiles.files[sshdconfig])"
+        handle    => "edit_sshd",
+        comment   => "Set desired sshd_config parameters",
+        edit_line => set_config_values("confiles.sshdops"),
+        classes   => if_repaired("restart_sshd");
+
+  commands:
+    restart_sshd.!no_restarts::
+      "/sbin/service sshd reload"
+      handle  => "sshd_restart",
+      contain => in_shell,
+      comment => "Restart sshd if the configuration file was modified";
+
+  reports:
+    restart_sshd.!no_restarts::
+       "$(sys.date) $(sys.uqhost) Restarting sshd";
+}
+####
+bundle agent edit_inittab
+{
+  files:
+     centos_6::
+      "$(confiles.files[inittab])"
+        handle        => "inittab_set_initdefault",
+        comment       => "Ensure graphical mode is disabled (default runmode=3)",
+        create        => "false",
+        edit_defaults => backup_timestamp,
+        classes       => if_repaired("inittab_edited"),
+        edit_line     => set_colon_field("id","2","3");
+
+  reports:
+    inittab_edited::
+       "$(sys.date) $(sys.uqhost) Changed default runmode to 3 in $(confiles.files[inittab])";
+    !inittab_edited::
+       "$(sys.date) $(sys.uqhost) $(confiles.files[inittab]) has correct default runmode";
+}
+####
+bundle agent ssh_sudo
+{
+# Add line 'Defaults   env_keep += "SSH_AUTH_SOCK"' to /etc/sudoers
+  vars:
+    "ssh_auth_sock" string => "Defaults    env_keep += \"SSH_AUTH_SOCK\"";
+
+  files:
+#    centos_6::
+    centos::
+    "$(confiles.files[sudoers])"
+    comment       => "Allow ssh-agent to work via sudo",
+    perms         => mog("440","root","root"),
+    create        => "false",
+    edit_defaults => backup_timestamp,
+    classes       => if_repaired("check_sudoers"),
+    edit_line     => append_if_no_line($(ssh_auth_sock));
+
+  commands:
+    check_sudoers::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+      handle  => "check_sudoers_after_$(this.promiser)",
+      comment => "Check sudoers file for errors";
+
+  reports:
+    check_sudoers::
+       "$(sys.date) $(sys.uqhost) Added $(ssh_auth_sock) line to $(confiles.files[sudoers]) by $(this.bundle)";
+#    !check_sudoers::
+#       "$(sys.date) $(sys.uqhost) No changes made to $(confiles.files[sudoers]) by $(this.bundle)";
+}
+####
+bundle agent wheel_sudoers
+{
+# Copy the wheel.conf to /etc/sudoers.d/wheel
+  files:
+#    centos_6::
+    centos::
+    "$(confiles.files[wheel])"
+    comment   => "Allow wheel group to run all commands without password",
+    perms     => mog("440","root","root"),
+    classes   => if_repaired("check_wheel"),
+#    copy_from => secure_cp("$(confiles.cfetcdir)/wheel","$(sys.policy_hub)");
+    copy_from => local_cp("$(confiles.cfetcdir)/wheel.conf");
+
+  commands:
+    check_wheel::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+      handle  => "check_wheel_after_$(this.promiser)",
+      comment => "Check sudoers for errors after wheel adding";
+
+  reports:
+    check_wheel::
+       "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/wheel.conf has been copied to $(confiles.files[wheel]) by $(this.bundle)";
+#    !check_wheel::
+#       "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/wheel.conf exists as $(confiles.files[wheel])";
+}
+####
+bundle agent dis_reqtty
+{
+# Comment (Defaults requiretty) in /etc/sudoers
+  files:
+#   centos_6::
+   centos::
+    "$(confiles.files[sudoers])"
+    comment       => "Enable \"ssh hostname sudo <cmd>\"",
+    perms         => mog("440","root","root"),
+    create        => "false",
+    edit_defaults => backup_timestamp,
+    classes       => if_repaired("check_sudoers"),
+    edit_line     => comment_lines_matching("^\s*Defaults\s*requiretty.*","#-Commented by $(this.bundle)-#");
+
+  commands:
+    check_sudoers::
+      "/usr/sbin/visudo -q -c -f $(confiles.files[sudoers])"
+        handle  => "sudoers_check_after_$(this.handle)",
+        comment => "Check sudoers file for errors";
+}
+####
+bundle agent sup_visord
+{
+  files:
+    macloud::
+      "$(confiles.files[supervisor])"
+        handle    => "edit_supervisor",
+        comment   => "Set desired supervisord parameters",
+        perms     => mog("644","root","root"),
+        copy_from => local_cp("$(confiles.cfetcdir)/supervisord.conf"),
+        classes   => if_repaired("restart_supervisord");
+
+  commands:
+    restart_supervisord.!no_restarts::
+      "/sbin/service supervisord restart"
+        contain => in_shell,
+        handle  => "supervisor_restart",
+        comment => "Restart supervisord if the configuration file was modified";
+
+  reports:
+    restart_supervisord.!no_restarts::
+       "$(sys.date) $(sys.uqhost) Restarting supervisord";
+}
+####
+bundle agent etc_hosts
+{
+  files:
+    linux.!policy_server::
+      "$(confiles.files[hosts])"
+      handle    => "copy_hosts_from_hub",
+      comment   => "Get hosts file generated at hub",
+      perms     => mog("644","root","root"),
+      # copy_from => local_cp("$(confiles.cfetcdir)/hosts.txt"),
+      copy_from => secure_cp("$(def.cfshare)/hosts", "$(sys.policy_hub)"),
+      classes   => if_repaired("hosts_copied");
+
+  reports:
+    hosts_copied.!policy_server::
+      "$(sys.date) $(sys.uqhost) Template file \"/etc/hosts\" is copied";
+}
+####
+bundle agent net_config
+{
+  vars:
+    redhat::
+       "inet6ops" slist => { "^udp6.*", "^tcp6.*" };
+
+  files:
+    redhat::
+      "$(confiles.files[netconfig])"
+      comment       => "to avoid flood messages in NFS logs",
+      perms         => mog("644","root","root"),
+      create        => "false",
+      edit_defaults => backup_timestamp,
+      classes       => if_repaired("netconfig_edited"),
+      edit_line     => comment_lines_matching("@(inet6ops)","#");
+
+  reports:
+    netconfig_edited::
+      "$(sys.date) $(sys.uqhost) file $(confiles.files[netconfig]) is edited by $(this.bundle)";
+}
+####
+bundle agent nfsser
+{
+  vars:
+    cloudera::
+      # "mounters" string => "node*.$(def.domain)(rw,no_subtree_check,insecure,no_root_squash)";
+      # "mounters" string => "*.$(def.domain)(rw)";
+      "mounters" string => "*.$(def.domain)(rw,insecure,no_subtree_check,no_root_squash,sync,nohide)";
+
+  files:
+    cloudera::
+      "$(sys.exports)"
+      comment        => "Set nfs share",
+      perms          => mog("644","root","root"),
+      create         => "false",
+      # edit_defaults  => empty,
+      edit_defaults  => backup_timestamp,
+      edit_line      => append_if_no_line("$(def.cfshare) $(nfsser.mounters)"),
+      classes        => if_repaired("exports_cfshared");
+
+    cloudera::
+      "$(def.nfsflag)"
+      comment        => "Create flag file for nfs clients",
+      perms          => mog("444","root","root"),
+      create         => "true",
+      edit_defaults  => no_backup,
+      edit_line      => append_if_no_line("THIS IS A FLAG FILE FOR NFS CLIENTS"),
+      classes        => if_repaired("nfsflag_created");
+
+  reports:
+    exports_cfshared::
+      "$(sys.date) $(sys.uqhost) line $(def.cfshare) $(nfsser.mounters) is added to $(sys.exports) by $(this.bundle)";
+    nfsflag_created::
+      "$(sys.date) $(sys.uqhost) file $(def.nfsflag) has been created by $(this.bundle)";
+}
+####
+bundle agent nfscl
+{
+  vars:
+    cloudnode::
+      "mntnfs"    string => "/mnt/nfs";
+      "mntnfscmd" string => "/bin/mount -t nfs $(confcloud.cloudmaster):$(def.cfshare) $(nfscl.mntnfs)";
+
+  files:
+    cloudnode::
+      "$(nfscl.mntnfs)/."
+      perms   => mog("755", "root", "root"),
+      create  => "true",
+      ifvarclass => not(fileexists("$(nfscl.mntnfs)/nfsflag")),
+      classes => if_repaired("mntnfs_created");
+
+  commands:
+    cloudnode::
+      "$(nfscl.mntnfscmd)"
+      contain => in_shell,
+      ifvarclass => not(fileexists("$(nfscl.mntnfs)/nfsflag")),
+      classes => cmd_repair(0, "cfshare_mounted"),
+      comment => "Mount nfs share from cfhub";
+
+  reports:
+    mntnfs_created::
+      "$(sys.date) $(sys.uqhost) mount point $(nfscl.mntnfs) is created by $(this.bundle)";
+    cfshare_mounted::
+      "$(sys.date) $(sys.uqhost) remote folder $(confcloud.cloudmaster):$(def.cfshare) is mounted to $(nfscl.mntnfs) by $(this.bundle)";
+}

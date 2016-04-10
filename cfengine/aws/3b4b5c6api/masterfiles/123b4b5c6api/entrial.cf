@@ -1,0 +1,59 @@
+###################################################
+# /var/cfengine/masterfiles/123b4b5c6api/entrial.cf
+###################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "entrial" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent entrial
+{
+  vars:
+    macloud::
+      # Files and folders
+      "clouderajars" string => "/opt/cfengine/cloudera";
+      "entrialjar"   string => "enable-trial-1.0-SNAPSHOT.jar";
+      # Command to apply license
+      "enabletrial"  string => "$(vc.javahome)/bin/java -jar $(clouderajars)/$(entrialjar) $(sys.ipv4[eth0]) enable admin $(vc.adpass)";
+      # "enabletrial"  string => "$(paths.curl) $(vc.xput) $(vc.contype) $(defadcreds) -d \'{ \"password\": \"$(vc.adpass)\" }\' \'$(vc.cmurl)/v8/cm/trial/begin\'";
+
+  files:
+    macloud::
+      "$(clouderajars)/."
+      comment      => "copy cloudera jars from policy server",
+      # perms        => mog("755","root","root"),
+      # copy_from    => local_cp("$(vc.cfetcdst)/enable-trial-1.0-SNAPSHOT.jar.txt"),
+      copy_from    => secure_cp("$(def.cfshare)/cloudera", "$(sys.policy_hub)"),
+      depth_search => recurse("inf"),
+      classes      => if_repaired("jars_copied");
+
+    trial_enabled::
+      "$(def.cfshare)/entrial.flag"
+      comment        => "Create flag file for nfs clients",
+      perms          => mog("444","root","root"),
+      create         => "true",
+      edit_defaults  => no_backup,
+      edit_line      => append_if_no_line("60-days from $(sys.date) Trial Cloudera Enterprise Data Hub Edition");
+
+  commands:
+    namenode::
+      "$(enabletrial)"
+      comment => "Enable trial enterprise license at Cloudera Manager Server",
+      contain => in_shell,
+      # chdir => "$(clouderajars)",
+      # Run trial enabling jar after default admin password has been changed
+      ifvarclass => and(fileexists("$(def.cfshare)/scm-admin.flag"),not(fileexists("$(def.cfshare)/entrial.flag"))),
+      classes => if_else("trial_enabled", "trial_failed");
+      # classes => cmd_repair(0, "trial_enabled");
+
+  reports:
+    jars_copied::
+      "$(sys.date) cloudera jars has been copied from $(sys.policy_hub) to $(sys.fqhost) by $(this.bundle)";
+    trial_enabled::
+      "$(sys.date) trial license has been applied at $(sys.fqhost) by $(this.bundle)";
+    trial_failed::
+      "$(sys.date) trial license IS NOT applied at $(sys.fqhost) by $(this.bundle)";
+}

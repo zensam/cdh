@@ -1,0 +1,54 @@
+[cloudera-cdh5]
+# Packages for Cloudera's Distribution for Hadoop, Version 5, on RedHat	or CentOS 6 x86_64
+name=Cloudera's Distribution for Hadoop, Version 5
+baseurl=http://archive.cloudera.com/cdh5/redhat/6/x86_64/cdh/5/
+gpgkey = http://archive.cloudera.com/cdh5/redhat/6/x86_64/cdh/RPM-GPG-KEY-cloudera
+enabled = 0
+gpgcheck = 1
+
+[cloudera-manager]
+# Packages for Cloudera Manager, Version 5, on RedHat or CentOS 6 x86_64
+name=Cloudera Manager
+baseurl=http://archive.cloudera.com/cm5/redhat/6/x86_64/cm/5/
+gpgkey = http://archive.cloudera.com/cm5/redhat/6/x86_64/cm/RPM-GPG-KEY-cloudera
+enabled = 0
+gpgcheck = 1
+
+[cloudera-director]
+# Packages for Cloudera Director, Version 1, on RedHat or CentOS 6 x86_64
+name=Cloudera Director
+baseurl=http://archive.cloudera.com/director/redhat/6/x86_64/director/1/
+gpgkey = http://archive.cloudera.com/director/redhat/6/x86_64/director/RPM-GPG-KEY-cloudera
+enabled = 0
+gpgcheck = 1
+
+[cdh5]
+# Packages for Cloudera's Distribution for Hadoop, Version 5, on RedHat	or CentOS 6 x86_64 (Local repo)
+name=Cloudera's Distribution for Hadoop, Version 5, Local Repository
+baseurl=http://cfhub/yum/cloudera-cdh5/
+gpgkey = http://cfhub/yum/gpg/RPM-GPG-KEY-cloudera
+enabled = 1
+gpgcheck = 1
+
+[cm]
+# Packages for Cloudera Manager, Version 5, on RedHat or CentOS 6 x86_64
+name=Cloudera Manager
+baseurl=http://cfhub/yum/cloudera-manager/
+gpgkey = http://cfhub/yum/gpg/RPM-GPG-KEY-cloudera
+enabled = 1
+gpgcheck = 1
+
+[director]
+# Packages for Cloudera Director, Version 1, on RedHat or CentOS 6 x86_64
+name=Cloudera Director
+baseurl=http://cfhub/yum/cloudera-director/
+gpgkey = http://cfhub/yum/gpg/RPM-GPG-KEY-cloudera
+enabled = 1
+gpgcheck = 1
+
+[local-repo]
+# Some packages for RedHat or CentOS 6 x86_64
+name=Red Hat Enterprise Linux $releasever - $basearch - CFEngine HUB
+baseurl=http://cfhub/yum/6/x86_64/
+enabled = 1
+gpgcheck = 0

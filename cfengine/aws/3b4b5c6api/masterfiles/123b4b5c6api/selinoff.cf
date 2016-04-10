@@ -1,0 +1,39 @@
+####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/selinoff.cf
+####################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "selinoff" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent selinoff
+{
+  vars:
+      "seconf" string  => "/etc/selinux/config";
+      "selen" slist    => { "^\s*SELINUX=\s*enforcing.*", "^\s*SELINUX=\s*permissive.*" };
+#      "sestat" string  => "/usr/sbin/sestatus";
+#      "nogrep" string  => "/bin/grep -v grep";
+#      "grepsop" string => "/bin/grep enforcing";
+#      "setO" string    => "/usr/sbin/setenforce 0";
+
+  files:
+   centos_6::
+   "$(seconf)"
+     classes   => if_repaired("selconf_edited"),
+     edit_line => comment_lines_matching("@(selinoff.selen)","#-Commented by $(this.bundle)#");
+
+  commands:
+    selconf_edited::
+#      "$(sestat) | $(nogrep) | $(grepsop) > /dev/null && $(setO)";
+      "/usr/sbin/setenforce 0";
+
+  reports:
+    selconf_edited::
+"$(sys.date) $(sys.uqhost) Editing $(seconf),commenting $(selen), executing \"setenforce 0\" to set current selinux mode to \"permissive\"";
+    !selconf_edited::
+     "$(sys.date) $(sys.uqhost) Selinux mode is in disabled state";
+
+}

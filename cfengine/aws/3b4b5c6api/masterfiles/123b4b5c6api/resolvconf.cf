@@ -1,0 +1,39 @@
+######################################################
+# /var/cfengine/masterfiles/123b4b5c6api/resolvconf.cf
+######################################################
+#
+# DNS configuration
+#
+# Uncomment next 4 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#      bundlesequence => { "resolvconf" };
+#}
+
+bundle agent resolvconf
+{
+  files:
+      "$(sys.resolv)"
+      edit_defaults => clear_resolvconf,
+      edit_line     => my_resolvconf,
+      create        => "true";
+}
+
+bundle edit_line my_resolvconf
+{
+  vars:
+      "searchdom"   string => "$(def.domain)";
+      "nameserver1" string => "8.8.8.8";
+      "nameserver2" string => "8.8.4.4";
+
+  insert_lines:
+"search $(searchdom)
+nameserver $(nameserver1)
+nameserver $(nameserver2)
+options timeout:2 attempts:1 rotate";
+}
+
+body edit_defaults clear_resolvconf
+{
+      empty_file_before_editing => "true";
+}

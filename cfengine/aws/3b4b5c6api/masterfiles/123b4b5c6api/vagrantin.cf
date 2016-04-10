@@ -1,0 +1,58 @@
+#####################################################
+# /var/cfengine/masterfiles/123b4b5c6api/vagrantin.cf
+#####################################################
+# Install vagrant at cfengine hub
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "vagrantin" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent vagrantin
+{
+  classes:
+     "no_vagrant" not => fileexists("/usr/bin/vagrant");
+#     "no_aws"    not => fileexists("");
+
+  commands:
+   no_vagrant.policy_server.osup::
+     "/usr/bin/yum -yt install https://dl.bintray.com/mitchellh/vagrant/vagrant_1.7.2_x86_64.rpm"
+#    "/bin/rpm -i https://dl.bintray.com/mitchellh/vagrant/vagrant_1.7.2_x86_64.rpm"
+     handle  => "install_vagrant_cmd",
+     comment => "Install vagrant rpm",
+     classes => cmd_repair(0, "vagdone"),
+     contain => in_shell;
+
+# Install vagrant plugin AWS:
+    "HOME=/root /usr/bin/vagrant plugin install vagrant-aws"
+     handle  => "install_vagrant_plugin_aws",
+     comment => "Install vagrant plugin AWS",
+     classes => cmd_repair(0, "awsdone"),
+     contain => in_shell;
+
+# Install vagrant plugin hosts:
+    "HOME=/root /usr/bin/vagrant plugin install vagrant-hosts"
+     handle  => "install_vagrant_plugin_hosts",
+     comment => "Install vagrant plugin hosts",
+     classes => cmd_repair(0, "hostsdone"),
+     contain => in_shell;
+
+  reports:
+    no_vagrant.policy_server.centos_6.!centos_6_5::
+     "$(sys.date) $(sys.fqhost) has no vagrant installed so trying to install";
+    vagdone::
+     "$(sys.date) $(sys.fqhost) vagrant has been installed";
+    !vagdone::
+     "$(sys.date) $(sys.fqhost) vagrant installation has been skipped";
+    awsdone::
+     "$(sys.date) $(sys.fqhost) vagrant-aws plugin has been installed";
+    !awsdone::
+     "$(sys.date) $(sys.fqhost) vagrant-aws plugin installation skipped";
+    hostsdone::
+     "$(sys.date) $(sys.fqhost) vagrant-hosts plugin has been installed";
+    !hostsdone::
+     "$(sys.date) $(sys.fqhost) vagrant-hosts plugin installation skipped";
+
+}

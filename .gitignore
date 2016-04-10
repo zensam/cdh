@@ -7,3 +7,10 @@ bin/*
 
 .kitchen/
 .kitchen.local.yml
+*.old
+packages
+*.rpm
+*.bak
+*.spec
+
+/.project

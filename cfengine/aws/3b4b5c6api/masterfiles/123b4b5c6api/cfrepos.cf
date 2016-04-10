@@ -1,0 +1,228 @@
+###############################################
+# /var/cfengine/masterfiles/123b4b5b/cfrepos.cf
+###############################################
+#
+# External and local yum repositories configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cfrepos" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent cfrepos
+{
+  vars:
+      # CentOS 6.X Repository configs directoty
+      "repodir" string => "/etc/yum.repos.d";
+      # Files to edit
+      "repo"     string => "$(cfrepos.repodir)/cloudera.repo";
+      "epelrepo" string => "$(cfrepos.repodir)/epel.repo";
+      "repos"     slist => { "$(cfrepos.repo)", "$(cfrepos.epelrepo)" };
+###
+  classes:
+      "no_repo" not => fileexists("$(repo)");
+      # "no_repos" not => fileexists("@(repos)");
+      "dontrun" expression => fileexists("$(vc.yum_pid)");
+###
+  methods:
+    !dontrun.policy_server::
+      "sync_n_create" usebundle => syncr,
+                        comment => "Syncronize local repo to remote";
+##
+    !dontrun.redhat.no_repo::
+      "add_repo"      usebundle => addrepo,
+                        comment => "Copy template file to $(repo)";
+##
+    # Import cloudera repositories keys (optional) # TODO only one command for import needed, not every policy circle
+    # !dontrun.(redhat_6|centos_6)::
+      # "cdh5_key" usebundle => import_cdh5_key;
+
+    # !dontrun.(redhat_6|centos_6)::
+      # "cm5_key"  usebundle => import_cm5_key;
+
+}
+####
+bundle agent syncr
+{
+  vars:
+      "repouser"   string => "cfapache";
+      "sudouser"   string => "/usr/bin/sudo -u $(syncr.repouser)";
+###
+  methods:
+    Sundays.Hr12::
+      "syncrcdh5"     usebundle => syncr_cdh5;
+##
+    Sundays.Hr12::
+      "syncrcm"       usebundle => syncr_cm;
+##
+    Sundays.Hr12::
+      "syncrdirector" usebundle => syncr_director;
+
+}
+####
+bundle agent syncr_cdh5
+{
+  vars:
+      "repoid"     string => "cloudera-cdh5";
+      "synclog"    string => "/var/log/$(syncr.repouser)/reposync.$(repoid).log";
+      "createlog"  string => "/var/log/$(syncr.repouser)/createrepo.$(repoid).log";
+      "reposync"   string => "$(syncr.sudouser) /usr/bin/reposync -l --repoid=$(repoid) --download_path=/opt/cfengine/yum";
+      "createrepo" string => "$(syncr.sudouser) /usr/bin/createrepo -v --database /opt/cfengine/yum/$(repoid)/";
+###
+  commands:
+      "$(reposync) > $(synclog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cdh5_synced"),
+      comment    => "Syncronize cloudera-cdh5 repositories to the local ones";
+##
+    cdh5_synced::
+      "$(createrepo) > $(createlog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cdh5_created");
+####
+  reports:
+    cdh5_synced::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been syncronized to /opt/cfengine/yum by $(this.bundle)";
+    cdh5_created::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been created in /opt/cfengine/yum/$(repoid) by $(this.bundle)";
+}
+####
+bundle agent syncr_cm
+{
+  vars:
+      "repoid"     string => "cloudera-manager";
+      "synclog"    string => "/var/log/$(syncr.repouser)/reposync.$(repoid).log";
+      "createlog"  string => "/var/log/$(syncr.repouser)/createrepo.$(repoid).log";
+      "reposync"   string => "$(syncr.sudouser) /usr/bin/reposync -l --repoid=$(repoid) --download_path=/opt/cfengine/yum";
+      "createrepo" string => "$(syncr.sudouser) /usr/bin/createrepo -v --database /opt/cfengine/yum/$(repoid)/";
+###
+  commands:
+      "$(reposync) > $(synclog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cm_synced"),
+      comment    => "Syncronize cloudera-manager repositories to the local ones";
+##
+    cm_synced::
+      "$(createrepo) > $(createlog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cm_created");
+###
+  reports:
+    cm_synced::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been syncronized to /opt/cfengine/yum by $(this.bundle)";
+    cm_created::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been created in /opt/cfengine/yum/$(repoid) by $(this.bundle)";
+
+}
+####
+bundle agent syncr_director
+{
+  vars:
+      "repoid"     string => "cloudera-director";
+      "synclog"    string => "/var/log/$(syncr.repouser)/reposync.$(repoid).log";
+      "createlog"  string => "/var/log/$(syncr.repouser)/createrepo.$(repoid).log";
+      "reposync"   string => "$(syncr.sudouser) /usr/bin/reposync -l --repoid=$(repoid) --download_path=/opt/cfengine/yum";
+      "createrepo" string => "$(syncr.sudouser) /usr/bin/createrepo -v --database /opt/cfengine/yum/$(repoid)/";
+###
+  commands:
+      "$(reposync) > $(synclog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cd_synced"),
+      comment    => "Syncronize cloudera-director repositories to the local ones";
+##
+    cd_synced::
+      "$(createrepo) > $(createlog)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cd_created");
+###
+  reports:
+    cd_created::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been syncronized to /opt/cfengine/yum by $(this.bundle)";
+    cd_created::
+       "$(sys.date) $(sys.uqhost) $(repoid) has been created in /opt/cfengine/yum/$(repoid) by $(this.bundle)";
+}
+####
+bundle agent addrepo
+{
+  # Copy cloudera.repo to /etc/yum.repos.d/
+  files:
+    (redhat_6|centos_6).!policy_server::
+      "$(cfrepos.repo)"
+      comment       => "Add repositories to yum, RHEL6 or CentOS6",
+      perms         => mog("644","root","root"),
+      create        => "true",
+      # copy_from     => local_cp("$(vc.cfetcdst)/cloudera-repo.txt"),
+      edit_template => "$(vc.cfetcdst)/cloudera-repo.tmpl.txt",
+      # ifvarclass    => fileexists("$(resizefs.stat_rebooted)"),
+      classes       => if_repaired("check_repos");
+##
+    (redhat_7|centos_7).!policy_server::
+      "$(cfrepos.repo)"
+      comment       => "Add repositories to yum, RHEL7 or CentOS7",
+      perms         => mog("644","root","root"),
+      create        => "true",
+      # copy_from     => local_cp("$(vc.cfetcdst)/cloudera-repo-rhel7.txt"),
+      edit_template => "$(vc.cfetcdst)/cloudera-repo-rhel7.tmpl.txt",
+      classes       => if_repaired("check_repos");
+##
+    policy_server::
+      "$(cfrepos.repo)"
+      comment       => "Add repositories to yum at CFEngine hub",
+      perms         => mog("644","root","root"),
+      create        => "true",
+      # copy_from     => local_cp("$(vc.cfetcdst)/cloudera-repo.txt"),
+      edit_template => "$(vc.cfetcdst)/cloudera-repo-hub.tmpl.txt",
+      classes       => if_repaired("check_repos");
+###
+  commands:
+    check_repos::
+      "$(vc.yumclean)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "yumcleaned");
+###
+  reports:
+    check_repos::
+      "$(sys.date) $(sys.uqhost) File $(cfrepos.repo) has been changed by $(this.bundle)";
+    repo6ed::
+      "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/cloudera-repo.tmpl.txt has been used to create $(cfrepos.repo)  by $(this.bundle)";
+    repo7ed::
+      "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/cloudera-repo-rhel7.tmpl.txt has been used to create $(cfrepos.repo)  by $(this.bundle)";
+    repohubed::
+      "$(sys.date) $(sys.uqhost) File $(confiles.cfetcdir)/cloudera-repo-hub.tmpl.txt has been used to create $(cfrepos.repo)  by $(this.bundle)";
+    yumcleaned::
+      "$(sys.date) $(sys.uqhost) yum caches has been cleaned by $(this.bundle)";
+}
+####
+bundle agent import_cdh5_key
+{
+  vars:
+    "cdh5key6url" string => "http://archive.cloudera.com/cdh5/redhat/6/x86_64/cdh/RPM-GPG-KEY-cloudera";
+###
+  commands:
+      "$(paths.rpm) --import $(cdh5key6url)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cdh5key6on"),
+      comment    => "Import cdh5 rpm repository key";
+###
+  reports:
+    cdh5key6on::
+      "$(sys.date) $(sys.uqhost) $(cdh5key6url) has been imported by $(this.bundle)";
+}
+####
+bundle agent import_cm5_key
+{
+  vars:
+    "cm5key6url" string => "http://archive.cloudera.com/cm5/redhat/6/x86_64/cm/RPM-GPG-KEY-cloudera";
+###
+  commands:
+      "$(paths.rpm) --import $(cm5key6url)"
+      contain    => in_shell,
+      classes    => cmd_repair(0, "cm5key6on"),
+      comment    => "Import cm5 rpm repository key";
+###
+  reports:
+    cm5key6on::
+      "$(sys.date) $(sys.uqhost) $(cm5key6url) has been imported by $(this.bundle)";
+}

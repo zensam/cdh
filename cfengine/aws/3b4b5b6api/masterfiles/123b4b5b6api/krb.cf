@@ -1,0 +1,77 @@
+###############################################
+# /var/cfengine/masterfiles/123b4b5b6api/krb.cf
+###############################################
+#
+# Kerberos instance configuration
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "krb" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent krb
+{
+  vars:
+      "kdc_name" string => "kdc";
+      "domup"    string => string_upcase("$(def.domain)");
+      # Files to edit
+      "confs[kdcconf]"  string => "/var/kerberos/krb5kdc/kdc.conf";
+      "confs[kadm5acl]" string => "/var/kerberos/krb5kdc/kadm5.acl";
+      "confs[krb5conf]" string => "/etc/krb5.conf";
+
+  methods:
+    kdcs::
+      "krbagent" usebundle => kdcagent,
+                   comment => "Configure kerberos";
+
+}
+####
+bundle agent kdcagent
+{
+  files:
+        "$(krb.confs[kdcconf])"
+        # handle        => "edit_kdc_conf",
+        comment       => "Make sure kdc.conf contains desired configuration settings",
+        create        => "false",
+        perms         => mog("600","root","root"),
+        edit_defaults => no_backup,
+        edit_template => "$(vc.cfetcdst)/kdc.tmpl.conf",
+        classes       => if_repaired("kdcconf_edited");
+
+        "$(krb.confs[kadm5acl])"
+        # handle        => "edit_kadm5acl",
+        comment       => "Make sure kadm5.acl contains desired configuration settings",
+        create        => "false",
+        perms         => mog("600","root","root"),
+        edit_defaults => no_backup,
+        edit_template => "$(vc.cfetcdst)/kadm5.tmpl.acl.txt",
+        classes       => if_repaired("kadm5acl_edited");
+
+        "$(krb.confs[krb5conf])"
+        # handle        => "edit_krb5_conf",
+        comment       => "Make sure kdc.conf contains desired configuration settings",
+        create        => "false",
+        perms         => mog("644","root","root"),
+        edit_defaults => no_backup,
+        edit_template => "$(vc.cfetcdst)/krb5.tmpl.conf",
+        classes       => if_repaired("krb5conf_edited");
+
+  commands:
+    # kdcconf_edited|kadm5acl_edited|krb5conf_edited::
+    krb5conf_edited::
+       "$(paths.service) krb5kdc restart && $(paths.service) kadmin restart"
+       comment => "Apply new cloudera agent settings";
+
+  reports:
+    kdcconf_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[kdcconf]) has been edited";
+       # "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+    kadm5acl_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[kadm5acl]) has been edited";
+       # "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+    krb5conf_edited::
+       "$(sys.date) $(sys.uqhost) $(krb.confs[krb5conf]) has been edited, domup variable is - $(krb.domup)";
+       "$(sys.date) $(sys.uqhost) Reloading krb5kdc and kadmin services";
+}

@@ -1,0 +1,2 @@
+#*/admin@_KERBEROS_DOMAIN_U_PLACEHOLDER_ *
+*/admin@$(krb.domup) *

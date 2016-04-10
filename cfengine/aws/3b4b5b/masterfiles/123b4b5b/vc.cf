@@ -1,0 +1,161 @@
+##########################################
+# /var/cfengine/masterfiles/123b4b5b/vc.cf
+##########################################
+#
+# Custom variables and contexts (classes)
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "vc" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent vc
+{
+  vars:
+      "cfcustnum" string => "123b4b5b";
+      "yum_hub"   string => "$(sys.policy_hub)";                  # Local yum repository IP address
+      "yum_pid"   string => "/var/run/yum.pid";                   # yum is running
+      "cmss"      string => "cloudera.$(def.domain)";             # Cloudera Management Service Server
+      "cmport"    string => "7180";                               # Cloudera Manager tcp port
+      "cmurl"     string => "http://$(vc.cmss):$(vc.cmport)/api"; # API url
+      "adpass"    string => "q1w2e3r4";                           # Cloudera admin credentials
+      "javahome"  string => "/usr/java/default";                  # Java home
+      # Files and folders
+      "cfetcdst"  string => "/var/cfengine/inputs/$(vc.cfcustnum)/cfetc";
+      "cfetcsrc"  string => "/var/cfengine/masterfiles/$(vc.cfcustnum)/cfetc";
+      "hostsfile" string => "/etc/hosts";
+      # Commands and options
+      "yumclean"  string => "$(paths.yum) clean all";
+      "contype"   string => "-H \"Content-Type:application/json\"";
+      "uadpass"   string => "-u admin:$(vc.adpass)";
+      "xget"      string => "-X GET";
+      "xput"      string => "-X PUT";
+      "xpost"     string => "-X POST";
+      "xdelete"   string => "-X DELETE";
+
+  classes:
+      ## Examples
+      #      "hubsuped"         and => { classmatch("hub.*"), "centos_6_6"}, persistence => "30";
+      #      "my_network1" expression => iprange("10.0.2.0/24"), persistence => "2";
+      #      "my_network2" expression => iprange("192.168.222.0/24");
+      #      "my_network3"         or => { iprange("192.168.111.0/24"), iprange("10.0.2.0/24")}, persistence => "2";
+      #      "compound1"           or => { classmatch("linux_2_6_32_504_16_2.*"), "suse_10_3" };
+      #      "my_class3"   expression => "solaris|(linux.specialclass)";
+      #      "user_class1" expression => userexists("toor");
+      #      "others"             not => "linux|solaris";
+      #      "no_toor"            not => userexists("toor");
+      ##The class on the left-hand side is set if an odd number of class expressions on
+      ##the right-hand side matches. This is most commonly used with two class expressions.
+      ## Type: clist
+      ## e.g we get drunk every Friday after 20:00
+      #      "order_booze"        xor => { "Friday", "Hr20"};
+      ## persistence makes the class persistent to avoid re-evaluation
+      ## The value specifies time in minutes. type: int
+      "cfenhubs"    expression => classmatch("cfhub.$(def.domain)"), persistence => "99999";
+      # "cloudnode"   expression => classmatch("node[0-9].*"), persistence => "999";
+      "cloudnode"         and => { classmatch("node[0-9].*"), "!cfenhubs" }, persistence => "999";
+      # "macloud"     expression => classmatch("cloudera.*"), persistence => "999";
+      "macloud"            and => { "cloudera", "!cfenhubs" }, persistence => "999";
+      "kdcs"               and => { "!cfenhubs", "kdc" }, persistence => "999";
+      # "kdcs"               and => { fileexists("/usr/lib64/krb5/plugins/preauth/pkinit.so"), "!cfenhubs" }, persistence => "999";
+      # "ldaps"              and => { "ldap", "!cfenhubs" }, persistence => "999";
+      # "ldaps"              and => { userexists("ldap"), "!cfenhubs" }, persistence => "999";
+      # "clined"             and => { userexists("cloudera-scm"),fileexists("/etc/rc.d/init.d/cloudera-scm-server") }, persistence => "9999";
+      # "clined"      expression => fileexists("/etc/rc.d/init.d/cloudera-scm-server"), persistence => "999";
+      "zoonode"            and => { classmatch("node[1-3].$(def.domain)"), "noded" }, persistence => "9999"; # nodes with zookeeper-server role
+      # "zoonode"            and => { "noded", "!cfenhubs" }, persistence => "9999"; # nodes with zookeeper-server role
+      "zkeeped"     expression => fileexists("/var/lib/zookeeper/myid"), persistence => "9999"; # zookeeper installed
+      "zoochok"     expression => filesexist("@(zookeeper.zoochecks)"), persistence => "9999"; # !namenode knows that zookeeper is deployed in cluster
+      "zoook"       expression => filesexist("@(zookeeper.zoochlst)"), persistence => "9999"; # namenode knows that zookeeper is deployed in cluster
+      # "zoook"              and => { "macloud", filesexist("@(zookeeper.zoochlst)") }, persistence => "9999"; # namenode knows that zookeeper is deployed in cluster
+      "hdfsed"             and => { userexists("hdfs"), groupexists("hdfs") }, persistence => "999";
+      "noded"       expression => fileexists("/var/lib/cloudera-scm-agent/uuid"), persistence => "999";
+      # "noded"              and => { fileexists("/var/lib/cloudera-scm-agent/uuid"),not(classmatch("clined") }, persistence => "999";
+      "jobtracker"         and => { "node2", "noded", "zkeeped" }, persistence => "9999"; # one node as jobtracker (check jobtrackhost var in hdfs.cf)
+      # "jobtracker"         and => { "macloud", "noded", "hdfsed" }, persistence => "999";
+      "namenode"           and => { "macloud", "noded", "zoook" }, persistence => "9999";
+      "secondnnode"        and => { "node1", "noded", "zoochok" }, persistence => "9999";
+      "datanode"      expression => "!cfenhubs.noded.(zoochok|zoook)", persistence => "9999";
+      "clish"       expression => fileexists("/opt/clusteraconfig.txt"), persistence => "99999"; # Cluster installed by cloudera.sh
+      # "datanode"           and => { "noded","!cfenhubs" }, persistence => "9999";
+      # "datanode"           and => { "!jobtracker", "!namenode", "!secondnnode", "noded", "hdfsed" }, persistence => "999";
+      # "clients"     expression => classmatch("XXXXX"), persistence => "999";
+      # classes for hosts, updated to certain level
+      "6up"                 or => { "redhat_6_6", "centos_6_6" }, persistence => "999";
+      "7up"                 or => { "redhat_7_1", "centos_7_1" }, persistence => "999";
+      "osup"                or => { "6up", "7up" }, persistence => "999";
+      "allnodes"            or => { "macloud", "cloudnode", "kdcs", "ldaps", "cfenhubs" }, persistence => "999999";
+      # fake classes to be changed after nodes defining
+      # "journalnode"        and => { "!linux", "!cfenhubs" }, persistence => "9999";
+      # "maphistnode"        and => { "!linux", "!cfenhubs" }, persistence => "9999";
+
+# Create folders for files exchange
+  files:
+    linux.!policy_server::
+      "$(def.cfopt)/."
+      perms   => mog("777", "root", "root"),
+      create  => "true",
+      classes => if_repaired("cfopt_created");
+
+    linux.!policy_server::
+      "$(def.cfshare)/."
+      perms   => mog("777", "root", "root"),
+      create  => "true",
+      classes => if_repaired("cfshare_created");
+
+    policy_server::
+      "$(def.cfshare)/."
+      perms   => mog("777", "cfapache", "cfapache"),
+      create  => "true";
+
+  reports:
+    cloudnode::
+      "$(sys.date) $(sys.uqhost) custom context \"cloudnode\" is defined";
+    macloud::
+      "$(sys.date) $(sys.uqhost) custom context \"macloud\" is defined";
+    allnodes::
+      "$(sys.date) $(sys.uqhost) custom context \"allnodes\" is defined";
+    cfenhubs::
+      "$(sys.date) $(sys.uqhost) custom context \"cfenhubs\" is defined";
+    kdcs::
+      "$(sys.date) $(sys.uqhost) custom context \"kdcs\" is defined";
+    ldaps::
+      "$(sys.date) $(sys.uqhost) custom context \"ldaps\" is defined";
+    osup::
+      "$(sys.date) $(sys.uqhost) custom context \"osup\" is defined";
+    6up::
+      "$(sys.date) $(sys.uqhost) custom context \"6up\" is defined";
+    7up::
+      "$(sys.date) $(sys.uqhost) custom context \"7up\" is defined";
+    clined::
+      "$(sys.date) $(sys.uqhost) custom context \"clined\" is defined";
+    hdfsed::
+      "$(sys.date) $(sys.uqhost) custom context \"hdfsed\" is defined";
+    noded::
+      "$(sys.date) $(sys.uqhost) custom context \"noded\" is defined";
+    zoonode::
+      "$(sys.date) $(sys.uqhost) custom context \"zoonode\" is defined";
+    jobtracker::
+      "$(sys.date) $(sys.uqhost) custom context \"jobtracker\" is defined";
+    namenode::
+      "$(sys.date) $(sys.uqhost) custom context \"namenode\" is defined";
+    secondnnode::
+      "$(sys.date) $(sys.uqhost) custom context \"secondnnode\" is defined";
+    zkeeped::
+      "$(sys.date) $(sys.uqhost) custom context \"zkeeped\" is defined";
+    zoook::
+      "$(sys.date) $(sys.uqhost) custom context \"zoook\" is defined";
+    zoochok::
+      "$(sys.date) $(sys.uqhost) custom context \"zoochok\" is defined";
+    datanode::
+      "$(sys.date) $(sys.uqhost) custom context \"datanode\" is defined";
+    cfopt_created::
+      "$(sys.date) $(sys.uqhost) folder $(def.cfopt) has been created by $(this.bundle)";
+    cfshare_created::
+      "$(sys.date) $(sys.uqhost) folder $(def.cfshare) has been created by $(this.bundle)";
+    others::
+      "$(sys.date) $(sys.uqhost) This host is not powered by linux";
+
+}

@@ -1,0 +1,90 @@
+#################################################
+# /var/cfengine/masterfiles/123b4b5c6api/phant.cf
+#################################################
+#
+# Install phantomjs from tarball
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "phant" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent phant
+{
+  vars:
+    macloud::
+      "phantomjs_arch" string => "phantomjs-1.9.8-linux-x86_64";
+#      "js_sha256sum"   string => "a1d9628118e270f26c4ddd1d7f3502a93b48ede334b8585d11c1c3ae7bc7163a";
+#      "zipdir"         string => "$(sys.masterdir)/123b4b5b/zip";
+      "wgetcmd"        string => "$(paths.wget) --no-check-certificate --tries=2 -q -c -P $(sys.workdir)";
+
+  methods:
+    macloud::
+      "untar" usebundle => un_tar,
+                comment => "Untar from archive if folder do not exists",
+             ifvarclass => and(not(fileexists("/opt/$(phant.phantomjs_arch)/.")),fileexists("$(sys.workdir)/$(phant.phantomjs_arch).tar.bz2"));
+
+    macloud::
+      "gettar" usebundle => get_tar,
+                 comment => "Wget archive if it isn't exists",
+              ifvarclass => not(fileexists("$(sys.workdir)/$(phant.phantomjs_arch).tar.bz2"));
+
+    macloud::
+      "phantlink" usebundle => phant_link,
+                 comment => "create symlink from phantomjs to /usr/bin",
+              ifvarclass => and(not(fileexists("/usr/bin/phantomjs")),fileexists("/opt/$(phant.phantomjs_arch)"));
+
+}
+
+bundle agent un_tar
+{
+  commands:
+    macloud::
+       "$(paths.tar) --directory=/opt -jxf $(sys.workdir)/$(phant.phantomjs_arch).tar.bz2"
+        handle  => "untar_phantomjs_arch",
+        comment => "Extract phantomjs by command",
+        contain => in_shell,
+        classes => if_repaired("ph_untared");
+
+  reports:
+    ph_untared::
+       "$(sys.date) $(sys.uqhost) $(phant.phantomjs_arch).tar.bz2 has been extracted";
+
+}
+
+bundle agent get_tar
+{
+  vars:
+    macloud::
+#     "phantomjs_url" string => "https://s3.eu-central-1.amazonaws.com/<mycompany-aws-resource>/$(phant.phantomjs_arch).tar.bz2";
+     "phantomjs_url" string => "http://$(sys.policy_hub)/dist/rhel6/$(phant.phantomjs_arch).tar.bz2";
+
+  commands:
+    macloud::
+      "$(phant.wgetcmd) $(phantomjs_url)"
+        comment => "Download_phantomjs_arch",
+        contain => in_shell,
+        classes => if_repaired("ph_downloaded");
+
+  reports:
+    ph_downloaded::
+       "$(sys.date) $(sys.uqhost) $(phant.phantomjs_arch).tar.bz2 file downloaded to $(sys.workdir)";
+
+}
+
+bundle agent phant_link
+{
+  files:
+    macloud::
+     "/usr/bin/phantomjs"
+     comment   => "Creating the symlink /usr/bin/phantomjs",
+     link_from => ln_s("/opt/$(phant.phantomjs_arch)/bin/phantomjs"),
+       classes => if_repaired("ph_linked");
+
+  reports:
+    ph_linked::
+       "$(sys.date) $(sys.uqhost) /opt/$(phant.phantomjs_arch)/bin/phantomjs is linked to /usr/bin";
+
+}

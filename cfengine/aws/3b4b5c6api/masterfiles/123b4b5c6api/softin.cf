@@ -1,0 +1,218 @@
+##################################################
+# /var/cfengine/masterfiles/123b4b5c6api/softin.cf
+##################################################
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "softin" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent softin
+{
+  vars:
+      # "environments" slist => { "virtenv1", "virtenv2" };
+      "environments"  slist => { "virtenv1" };
+      "virtdir"      string => "/opt";
+    redhat::
+      "red_list"      slist => {
+                                "epel-release",
+                                "e2fsprogs",
+                                "wget",
+                                };
+    allnodes::
+      "allnodes_list" slist => {
+                                "bind-utils",
+                                "bzip2",
+                                "curl",
+                                "expect",
+                                "gcc",
+                                "git",
+                                "gitflow",
+                                "haveged",
+                                "inotify-tools",
+                                "krb5-libs",
+                                "krb5-workstation",
+                                "libselinux-python",
+                                "libstdc++",
+                                "lsof",
+                                "make",
+                                "mailx",
+                                "man",
+                                "mc",
+                                "nc",
+                                "net-tools",
+                                "nfs-utils",
+                                "ngrep",
+                                "nmap",
+                                "ntp",
+                                "openldap",
+                                "openldap-clients",
+                                "parted",
+                                "portreserve",
+                                "postfix",
+                                "psacct",
+                                "psmisc",
+                                "python-pip",
+                                "python-setuptools",
+                                "python-urllib3",
+                                "sudo",
+                                "supervisor",
+                                "tar",
+                                "tcpdump",
+                                "telnet",
+                                "unzip",
+                                "tzdata",
+                                "vim-common",
+                                "vim-enhanced",
+                               };
+    macloud::
+      "cloudera_list" slist => {
+                                "cloudera-manager-agent",
+                                "cloudera-manager-daemons",
+                                "cloudera-manager-server-db-2",
+                                "cloudera-manager-server",
+                                "expect",
+                                "fontconfig",
+                                "freetype",
+                                "freetype-devel",
+                                "freetype",
+                                "fuse-sshfs",
+                                "jdk",
+                                "nginx",
+                                "MySQL-python",
+                                "mysql-server",
+                                "python-virtualenvwrapper",
+                               };
+    cloudnode::
+       "node_list"    slist => {
+                                "cloudera-manager-agent",
+                                "cloudera-manager-daemons",
+                                "jdk",
+                                "mysql-connector-java",
+                                "python-virtualenvwrapper",
+                               };
+    kdcs::
+       "kdc_list"     slist => {
+                                "gnutls-utils",
+                                "gnutls",
+                                "krb5-libs",
+                                "krb5-server-ldap",
+                                "krb5-server",
+                                "krb5-pkinit",
+                                "openldap",
+                                "openldap-clients",
+                                "openldap-devel",
+                                "openldap-servers",
+                               };
+    ldaps::
+       "ldap_list"    slist => {
+                                "gnutls-utils",
+                                "gnutls",
+                                "krb5-server-ldap",
+                                "openldap",
+                                "openldap-clients",
+                                "openldap-devel",
+                                "openldap-servers",
+                               };
+    cfenhubs::
+       "hub_list"     slist => {
+                                "apr-devel",
+                                "automake",
+                                "autoconf",
+                                "createrepo",
+                                "fuse-sshfs",
+                                "jdk",
+                                "openssl-devel",
+                                "httpd-devel",
+                                "sqlite-devel",
+                                "ruby-rdoc",
+                                "ruby-devel",
+                                "rubygems",
+                                "xfsprogs",
+                                "xfsdump",
+                                "yum-utils",
+                                "zlib-devel",
+                                "zookeeper"
+                               };
+
+    samhp::
+       "hp_list"     slist => {
+                                "createrepo",
+                                "fuse-sshfs",
+                                "httpd",
+                                "jdk",
+                               };
+
+ packages:
+#  Install epel repository to all redhat like hosts
+   redhat::
+     "${red_list}"
+     package_policy => "addupdate",
+     package_method => yum;
+
+#  Install packages from allnodes_list to all updated hosts
+   allnodes::
+     "${allnodes_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+# Install packages from cloudera_list to the cloudera masters
+# using policy "add" to avoid casual updating
+   macloud::
+     "${cloudera_list}"
+#     package_policy => "addupdate",
+     package_policy => "add",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+# Install packages from node_list to the nodes
+# using policy "add" to avoid casual updating
+   cloudnode::
+     "${node_list}"
+#     package_policy => "addupdate",
+     package_policy => "add",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+#  Install packages from kdc_list to the kerberos servers
+   kdcs::
+     "${kdc_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+#  Install packages from ldap_list to the kerberos servers
+   ldaps::
+     "${ldap_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+#  Install packages from hub_list to the policy server
+   policy_server.osup::
+     "${hub_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+#  Install packages from hp_list to samhp
+   samhp.osup::
+     "${hp_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+  classes:
+    macloud::
+       "incorrect_$(environments)" not => fileexists("$(virtdir)/$(environments)/bin/python");
+
+  commands:
+    macloud::
+       "/usr/bin/virtualenv $(virtdir)/$(environments) --no-site-packages"
+       contain => in_shell,
+       ifvarclass => canonify("incorrect_$(environments)");
+
+}

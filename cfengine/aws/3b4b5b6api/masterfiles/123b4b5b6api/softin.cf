@@ -1,0 +1,253 @@
+##################################################
+# /var/cfengine/masterfiles/123b4b5b6api/softin.cf
+##################################################
+#
+# Software set installation
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#     bundlesequence => { "softin" };
+#             inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent softin
+{
+  vars:
+      "yumupcmd" string => "$(paths.yum) update -yt";
+      # "environments" slist => { "virtenv1", "virtenv2" };
+      "environments"  slist => { "virtenv1" };
+      "virtdir"      string => "/opt";
+    redhat::
+      "red_list"      slist => {
+                                "epel-release",
+                                "e2fsprogs",
+                                "wget",
+                                };
+    allnodes::
+      "allnodes_list" slist => {
+                                "ansible",
+                                "bind-utils",
+                                "bzip2",
+                                "curl",
+                                "gcc",
+                                "git",
+                                "gitflow",
+                                "haveged",
+                                "inotify-tools",
+                                "krb5-libs",
+                                "krb5-workstation",
+                                "libselinux-python",
+                                "libstdc++",
+                                "lsof",
+                                "make",
+                                "mailx",
+                                "man",
+                                "mc",
+                                "nc",
+                                "net-tools",
+                                "nfs-utils",
+                                "ngrep",
+                                "nmap",
+                                "ntp",
+                                "openldap",
+                                "openldap-clients",
+                                "openssh-server",
+                                "openssh-clients",
+                                "parted",
+                                "portreserve",
+                                "postfix",
+                                "psacct",
+                                "psmisc",
+                                "python-jinja2",
+                                "python-paramiko",
+                                "PyYAML",
+                                "python-pip",
+                                "python-setuptools",
+                                "python-urllib3",
+                                "sudo",
+                                "supervisor",
+                                "tar",
+                                "tcpdump",
+                                "telnet",
+                                "unzip",
+                                "tzdata",
+                                "vim-common",
+                                "vim-enhanced",
+                               };
+    macloud::
+      "cloudera_list" slist => {
+                                "at",
+                                "bc",
+                                "ed",
+                                "fuse",
+                                "fuse-libs",
+                                "gettext",
+                                "gstreamer",
+                                "gstreamer-tools",
+                                "cloudera-manager-agent",
+                                "cloudera-manager-daemons",
+                                "cloudera-manager-server-db-2",
+                                "cloudera-manager-server",
+                                "expect",
+                                "fontconfig",
+                                "foomatic",
+                                "freetype",
+                                "freetype-devel",
+                                "freetype",
+                                "fuse-sshfs",
+                                "jdk",
+                                "nginx",
+                                "MySQL-python",
+                                "mysql-connector-java",
+                                "mysql-server",
+                                "python-virtualenvwrapper",
+                                "qt3",
+                                "qt-x11",
+                               };
+    cloudnode::
+       "node_list"    slist => {
+                                "cloudera-manager-agent",
+                                "cloudera-manager-daemons",
+                                "jdk",
+                                "at",
+                                "bc",
+                                "ed",
+                                "fuse",
+                                "fuse-libs",
+                                "gettext",
+                                "gstreamer",
+                                "gstreamer-tools",
+                                "foomatic",
+                                "mysql-connector-java",
+                                "qt3",
+                                "qt-x11",
+                               };
+    kdcs::
+       "kdc_list"     slist => {
+                                "gnutls-utils",
+                                "gnutls",
+                                "krb5-libs",
+                                "krb5-server-ldap",
+                                "krb5-server",
+                                "krb5-pkinit-openssl",
+                                "openldap",
+                                "openldap-clients",
+                                "openldap-devel",
+                                "openldap-servers",
+                                "words",
+                               };
+    ldaps::
+       "ldap_list"    slist => {
+                                "gnutls-utils",
+                                "gnutls",
+                                "krb5-server-ldap",
+                                "openldap",
+                                "openldap-clients",
+                                "openldap-devel",
+                                "openldap-servers",
+                               };
+    cfenhubs::
+       "hub_list"     slist => {
+                                "apr-devel",
+                                "automake",
+                                "autoconf",
+                                "createrepo",
+                                "fuse-sshfs",
+                                # "jdk",
+                                "openssl-devel",
+                                "httpd-devel",
+                                "sqlite-devel",
+                                "ruby-rdoc",
+                                "ruby-devel",
+                                "rubygems",
+                                "xfsprogs",
+                                "xfsdump",
+                                "yum-utils",
+                                "zlib-devel",
+                                # "zookeeper"
+                               };
+
+ packages:
+   # Install epel repository to all redhat like hosts
+   redhat::
+     "${red_list}"
+     package_policy => "addupdate",
+     package_method => yum;
+
+   # Install packages from allnodes_list to all updated hosts
+   allnodes.osup::
+     "${allnodes_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+   # Install packages from cloudera_list to the cloudera masters
+   # using policy "add" to avoid casual updating
+   macloud.osup::
+     "${cloudera_list}"
+     # package_policy => "addupdate",
+     package_policy => "add",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+   # Install packages from node_list to the nodes
+   # using policy "add" to avoid casual updating
+   cloudnode.osup::
+     "${node_list}"
+     # package_policy => "addupdate",
+     package_policy => "add",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     package_method => yum;
+
+   # Install packages from kdc_list to the kerberos servers
+   kdcs.osup::
+     "${kdc_list}"
+     package_policy => "addupdate",
+     ifvarclass => filesexist("@(cfrepos.repos)"),
+     classes    => if_repaired("kdcs_softed"),
+     package_method => yum;
+
+   # Install packages from ldap_list to the kerberos servers
+   # ldaps::
+     # "${ldap_list}"
+     # package_policy => "addupdate",
+     # ifvarclass => filesexist("@(cfrepos.repos)"),
+     # package_method => yum;
+
+   # Install packages from hub_list to the policy server
+    policy_server.osup::
+      "${hub_list}"
+      package_policy => "addupdate",
+      ifvarclass => filesexist("@(cfrepos.repos)"),
+      package_method => yum;
+
+  classes:
+    macloud::
+       "incorrect_$(environments)" not => fileexists("$(virtdir)/$(environments)/bin/python");
+###
+  classes:
+      "noreboot" expression => fileexists("$(vc.yum_pid)");
+###
+  commands:
+    !noreboot.!osup::
+      "$(softin.yumupcmd) && /sbin/reboot"
+      ifvarclass => filesexist("@(cfrepos.repos)"),
+      contain => in_shell;
+##
+    kdcs_softed::
+      "$(paths.service) krb5kdc stop && $(paths.service) kadmin stop"
+      contain => in_shell,
+      comment => "Stop kerberos services for configuration";
+##
+   macloud::
+      "/usr/bin/virtualenv $(virtdir)/$(environments) --no-site-packages"
+      contain => in_shell,
+      ifvarclass => canonify("incorrect_$(environments)");
+###
+  reports:
+    kdcs_softed::
+       "$(sys.date) $(sys.uqhost) context \"kdcs_softed\" is defined by $(this.bundle)";
+    noreboot::
+       "$(sys.date) $(sys.uqhost) context \"noreboot\" is defined by $(this.bundle)";
+}

@@ -1,0 +1,222 @@
+##################################################
+# /var/cfengine/masterfiles/123b4b5c6api/swapon.cf
+##################################################
+#
+# Create swap from /dev/xvdb partition if exists
+# Generates /swap file and includes it to /etc/fstab if no /dev/xvdb
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "swapon" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+bundle agent swapon
+{
+  vars:
+#    "swapblk"   string => execresult("/bin/lsblk | /bin/grep -w '4G' | /bin/grep -w 'disk' | /bin/awk '{print $1}'","useshell");
+#    "swapdev"   string => "/dev/$(swapon.swapblk)";
+    "swapdev"   string => execresult("/sbin/fdisk -l | /bin/grep -w '4294 MB' | /bin/awk '{print $2}' | /bin/sed 's/:$//'","useshell");
+#    "swapdev"   string => "/dev/xvdb";
+    "swapfile"  string => "/swap";
+    "swapsize"  string => "524288";
+#    "swapsize"  string => "1048576";
+    "swapfstab" string => "$(swapon.swapfile)          swap         swap    defaults        0 0";
+    "devfstab"  string => "$(swapon.swapdev)1          swap         swap    defaults        0 0";
+    "makeswap"  string => "/sbin/mkswap";
+    "onswap"    string => "/sbin/swapon";
+
+#  classes:
+#    "swapit" string => and(fileexists("$(resizefs.stat_rebooted)"),not(fileexists("$(swapon.swapfile)")));
+
+  methods:
+    linux::
+      "devswap" usebundle => devswap,
+      ifvarclass => and(fileexists("$(swapon.swapdev)"),not(fileexists("$(swapon.swapdev)1"))),
+#     ifvarclass => fileexists("$(swapon.swapdev)"),
+         comment => "Add swap device if /dev/xvdb exists";
+
+    linux::
+      "setswap" usebundle => setswap,
+#      ifvarclass => not(fileexists("$(swapon.swapdev)")),
+#      ifvarclass => and(not(fileexists("$(swapon.swapdev)")),not(fileexists("$(swapon.swapfile)"))),
+      ifvarclass => and(fileexists("$(resizefs.stat_rebooted)"),not(fileexists("$(swapon.swapdev)")),not(fileexists("$(swapon.swapfile)"))),
+         comment => "Add swap file when os rebooted after resizing and /dev/xvdb and /swap are absent";
+
+  reports:
+    linux::
+      "$(sys.date) $(sys.uqhost) device $(swapdev) is present"
+      ifvarclass => fileexists("$(swapon.swapdev)");
+
+}
+
+bundle agent setswap
+{
+  files:
+     "$(swapon.swapfile)"
+#      classes => if_repaired("set_swap"),
+#      create => "true",
+      perms => mog("600", "root", "root");
+
+  commands:
+      "/bin/dd if=/dev/zero of=$(swapon.swapfile) bs=1024 count=$(swapon.swapsize)"
+      contain => in_shell,
+      handle  => "dd_swap_file",
+      classes => cmd_repair(0, "dddone"),
+      comment => "Create swap file with dd";
+
+    dddone::
+      "$(swapon.makeswap) $(swapon.swapfile)"
+      contain    => in_shell,
+      handle     => "make_swap_file",
+      classes    => cmd_repair(0, "mkdone"),
+      ifvarclass => fileexists("$(swapon.swapfile)"),
+      comment    => "Make swap by mkswap ";
+
+    mkdone::
+      "$(swapon.onswap) $(swapon.swapfile)"
+      contain => in_shell,
+      handle  => "swap_on",
+      classes => cmd_repair(0, "swapison"),
+      ifvarclass => fileexists("$(swapon.swapfile)"),
+      comment => "Activate swap file by swapon";
+
+
+  methods:
+    dddone::
+      "tofstab"  usebundle => tofstab,
+                   comment => "Add line $(swapon.swapfstab) to $(sys.fstab) file";
+
+  reports:
+    dddone::
+    "$(sys.date) $(sys.uqhost) file $(swapon.swapfile) is filled with zeros untill $(swapon.swapsize) size";
+    linux.!dddone::
+    "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    mkdone::
+    "$(sys.date) $(sys.uqhost) Command \"$(swapon.makeswap) $(swapon.swapfile)\" is executed";
+    linux.!mkdone::
+    "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    swapison::
+    "$(sys.date) $(sys.uqhost) Command \"$(swapon.onswap) $(swapon.swapfile)\" is executed";
+    linux.!swapison::
+    "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    dddone.mkdone.swapison::
+    "$(sys.date) $(sys.uqhost) all swap settings are applied";
+
+}
+
+bundle agent tofstab
+{
+  commands:
+      "/usr/bin/printf \'\n$(swapon.swapfstab)\n\' >> $(sys.fstab)"
+      contain => in_shell,
+      handle  => "add_swap_to_fstab",
+      classes => cmd_repair(0, "adddone"),
+      comment => "Add swap file to fstab";
+
+      "/bin/sort -um $(sys.fstab) -o $(sys.fstab)"
+#      contain => in_shell,
+      handle  => "delete_duplicates_from_fstab",
+      classes => cmd_repair(0, "dupdel"),
+      comment => "Delete possible duplicates entries from fstab file";
+
+
+  reports:
+    adddone::
+      "$(sys.date) $(sys.uqhost) line \"$(swapon.swapfstab)\" added to $(sys.fstab)";
+    linux.!adddone::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+    dupdel::
+      "$(sys.date) $(sys.uqhost) $(sys.fstab) is checked by \"sort -um\" command";
+    !dupdel::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+}
+
+bundle agent devswap
+{
+  vars:
+    "fdiskswap" string => "/bin/echo -e \"u\nc\nn\np\n1\n\n\nw\n\" | /sbin/fdisk $(swapon.swapdev) &> /dev/null";
+#    "fdiskswap" string => "/bin/echo -e \"u\nc\nn\np\n1\n\n\nw\n\" | /sbin/fdisk $(swapon.swapdev) &> /dev/null || /bin/echo \'\'";
+#### /bin/echo -e "u\nc\nn\np\n1\n\n\nw\n" | /sbin/fdisk /dev/xvdb
+
+  commands:
+      "$(fdiskswap)"
+      contain => in_shell,
+      handle  => "fdisk_swap_dev",
+      classes => cmd_repair(0, "fdiskdone"),
+      comment => "Create swap file with dd";
+
+    fdiskdone::
+      "$(swapon.makeswap) $(swapon.swapdev)1"
+#      contain => in_shell,
+      handle  => "make_swap_partition",
+      classes => cmd_repair(0, "makedone"),
+      comment => "Make swap partition by mkswap";
+
+    makedone::
+      "$(swapon.onswap) $(swapon.swapdev)1"
+#      contain => in_shell,
+      handle  => "swapdev_on",
+      classes => cmd_repair(0, "swapdevison"),
+      comment => "Activate swap partition by swapon";
+
+
+  methods:
+    fdiskdone::
+      "devtofstab"  usebundle => devtofstab,
+                      comment => "Add line $(swapon.devfstab) to $(sys.fstab) file";
+
+  reports:
+    fdiskdone::
+      "$(sys.date) $(sys.uqhost) partition $(swapon.swapdev)1 is created";
+    !fdiskdone::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    makedone::
+      "$(sys.date) $(sys.uqhost) Command \"$(swapon.makeswap) $(swapon.swapdev)1\" has been executed";
+    !mkdone::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    swapdevison::
+      "$(sys.date) $(sys.uqhost) Command \"$(swapon.onswap) $(swapon.swapdev)1\" has been executed";
+    !swapdevison::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+    fdiskdone.makedone.swapdevison::
+      "$(sys.date) $(sys.uqhost) swap partition is created and activated";
+
+}
+
+bundle agent devtofstab
+{
+  commands:
+      "/usr/bin/printf \'\n$(swapon.devfstab)\n\' >> $(sys.fstab)"
+      contain => in_shell,
+      handle  => "add_swap_dev_to_fstab",
+      classes => cmd_repair(0, "devadded"),
+      comment => "Add swap device to fstab";
+
+    devadded::
+      "/bin/sort -um $(sys.fstab) -o $(sys.fstab)"
+      contain => in_shell,
+      handle  => "delete_duplicates_from_fstab",
+      classes => cmd_repair(0, "dupdel"),
+      comment => "Delete duplicates entries from fstab file";
+
+
+  reports:
+    devadded::
+      "$(sys.date) $(sys.uqhost) line \"$(swapon.devfstab)1\" is added to $(sys.fstab)";
+    !devaddded::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+    dupdel::
+      "$(sys.date) $(sys.uqhost) $(sys.fstab) is checked by \"sort -um\" command";
+    !dupdel::
+      "$(sys.date) $(sys.uqhost) $(this.handle) is ommited or failed";
+
+}

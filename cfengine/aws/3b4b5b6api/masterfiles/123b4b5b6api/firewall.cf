@@ -1,0 +1,49 @@
+################################################
+# /var/cfengine/masterfiles/123b4b5b/firewall.cf
+################################################
+#
+# Include all listening tcp ports to /etc/sysconfig/iptables
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "firewall", };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+####
+bundle agent firewall
+{
+  vars:
+    policy_server::
+    # redhat_6|centos_6::
+      "rules" string => "/etc/sysconfig/iptables";
+###
+  methods:
+    policy_server::
+    # redhat_6|centos_6::
+      "copyrules" usebundle => fwrules,
+                    comment => "Generate /etc/sysconfig/iptables from template file";
+
+}
+####
+bundle agent fwrules
+{
+  files:
+      "$(firewall.rules)"
+      comment       => "Set desired firewall parameters",
+      perms         => mog("0600","root","root"),
+      create        => "true",
+      edit_template => "$(vc.cfetcdst)/iptables.tmpl.txt",
+      classes       => if_repaired("restart_iptables");
+###
+  commands:
+    restart_iptables.(redhat_6|centos_6)::
+      "$(paths.echo) \'$(this.bundle) modified to not restart iptables\'" # do fake action to avoid firewall starting
+      # "$(paths.service) iptables restart"
+      comment => "Restart iptables if configuration file was modified CentOS 6";
+##
+    restart_iptables.(redhat_6|centos_7)::
+      "$(paths.echo) \'$(this.bundle) modified to not restart firewalld\'" # do fake action to avoid firewall starting
+      # "$(paths.systemctl) restart firewalld"
+      comment => "Restart firewalld if configuration file was modified CentOS 7";
+}

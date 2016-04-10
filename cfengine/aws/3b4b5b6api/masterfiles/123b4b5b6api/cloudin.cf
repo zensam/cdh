@@ -1,0 +1,80 @@
+###################################################
+# /var/cfengine/masterfiles/123b4b5b6api/cloudin.cf
+###################################################
+#
+# Run cloudera.sh script to get cloudera cluster
+#
+# Uncomment next 5 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#    bundlesequence => { "cloudin" };
+#    inputs => { "$(sys.libdir)/stdlib.cf" };
+#}
+
+body contain cd(dir)
+{
+      chdir => "${dir}";
+      useshell => "true";
+}
+
+bundle agent cloudin
+{
+  vars:
+      "optdir"  string => "/opt/cloudera";
+      "run_dir" string => "/opt/cd-cloudbreak";
+      "parcelv" string => "CDH-5.3.4-1.cdh5.3.4.p0.4-el6.parcel";
+      "fileslst" slist => { "$(resizefs.stat_resized)", "$(cloudin.run_dir)/Cloudera/CFEngine/startup/cloudera.sh" };
+      # "notflst"  slist => { "/opt/clusteraconfig.txt", "$(cloudin.optdir)/parcel-cache/$(cloudin.parcelv)" };
+
+  files:
+    macloud|cloudnode::
+      "$(cloudin.run_dir)/."
+      perms      => mog("755", "root", "root"),
+      create     => "true",
+      classes    => if_repaired("rundir_created");
+
+  classes:
+      "dontrun" expression => fileexists("$(vc.yum_pid)");
+      "cdready" expression => filesexist("@(cloudin.fileslst)");
+      "timeok"  expression => isgreaterthan("$(sys.uptime)","12");
+
+
+  commands:
+    macloud|cloudnode::
+      "$(paths.wget) -q -c http://cfhub/dist/cd-cloudbreak.tar.gz && $(paths.tar) --directory=$(cloudin.run_dir) -zxf /tmp/cd-cloudbreak.tar.gz"
+      # "$(paths.curl) -qs -O https://s3-eu-west-1.amazonaws.com/<mycompany-aws-resource>/cd-cloudbreak.tar.gz && $(paths.tar) --directory=$(cloudin.run_dir) -zxf /tmp/cd-cloudbreak.tar.gz"
+      ifvarclass => and(fileexists("$(resizefs.stat_resized)"),not(fileexists("/tmp/cd-cloudbreak.tar.gz"))),
+      contain    => cd("/tmp");
+
+    # macloud.6up.!clish::
+    !dontrun.timeok.cdready.macloud::
+      "$(cloudin.run_dir)/Cloudera/CFEngine/startup/cloudera.sh cloudera-server &> /var/log/cd-cloudera-start.log"
+      # ifvarclass => not(filesexist("@(cloudin.notflst)")),
+      # ifvarclass => and(fileexists("$(cloudin.run_dir)/Cloudera/CFEngine/startup/cloudera.sh"),not(fileexists("$(cloudin.optdir)/parcel-cache/$(cloudin.parcelv)"))),
+      ifvarclass => not(fileexists("$(cloudin.optdir)/parcel-cache/$(cloudin.parcelv)")),
+      contain    => cd("$(cloudin.run_dir)/Cloudera/CFEngine/startup"),
+      classes    => if_repaired("mac_clouded");
+
+    !dontrun.timeok.cdready.cloudnode::
+      "$(cloudin.run_dir)/Cloudera/CFEngine/startup/cloudera.sh cloudera-node &> /var/log/cd-cloudera-start.log"
+      # ifvarclass => not(filesexist("@(cloudin.notflst)")),
+      # ifvarclass => and(fileexists("$(cloudin.run_dir)/Cloudera/CFEngine/startup/cloudera.sh"),not(fileexists("$(cloudin.optdir)/parcel-cache/$(cloudin.parcelv)"))),
+      ifvarclass => not(fileexists("$(cloudin.optdir)/parcel-cache/$(cloudin.parcelv)")),
+      contain    => cd("$(cloudin.run_dir)/Cloudera/CFEngine/startup"),
+      classes    => if_repaired("node_clouded");
+
+  reports:
+    redhat::
+       "$(sys.date) $(sys.uqhost) \"uptime\" is $(sys.uptime), checked by $(this.bundle)";
+    timeok::
+       "$(sys.date) $(sys.uqhost) context \"timeok\" is defined by $(this.bundle)";
+    cdready::
+       "$(sys.date) $(sys.uqhost) context \"cdready\" is defined by $(this.bundle)";
+    dontrun::
+       "$(sys.date) $(sys.uqhost) context \"dontrun\" is defined by $(this.bundle)";
+    mac_clouded::
+       "$(sys.date) $(sys.uqhost) script \"cloudera.sh\" has been invoked by $(this.bundle)";
+    node_clouded::
+       "$(sys.date) $(sys.uqhost) script \"cloudera.sh\" has been invoked by $(this.bundle)";
+
+}

@@ -1,0 +1,48 @@
+############################################
+# /var/cfengine/masterfiles/123b4b5b/motd.cf
+############################################
+#
+# Informative message of the day
+#
+# Uncomment next 4 lines to test policy with 'cf-agent -f' command
+#body common control
+#{
+#      bundlesequence => { "motd" };
+#}
+
+bundle agent motd
+{
+  files:
+      "/etc/motd"
+      edit_defaults => clear_motd,
+      edit_line     => my_motd,
+      create        => "true";
+}
+
+#@ The bundle `my_motd` and body `empty` detail what content we want
+#@ in the file using CFEngine's built-in line-editor.
+
+bundle edit_line my_motd
+{
+  vars:
+      "interfaces_str"  string => join(", ","sys.interfaces");
+      "ipaddresses_str" string => join(", ","sys.ip_addresses");
+
+  insert_lines:
+      "Welcome to $(sys.fqhost)!
+This system is managed by CFEngine, Policy Hub has IP - $(sys.policy_hub)
+The policy was last updated on $(sys.last_policy_update).
+The system has $(sys.cpus) cpus and kernel - $(sys.release).
+Network interfaces on this system are $(interfaces_str),
+and the ip-addresses assigned are $(ipaddresses_str).";
+}
+
+#@ The `my_motd` bundle describes the content we want.
+
+body edit_defaults clear_motd
+{
+      empty_file_before_editing => "true";
+}
+
+#@ Baseline memory model of file to zero/empty before
+#@ populating the model using edit_line my_motd
