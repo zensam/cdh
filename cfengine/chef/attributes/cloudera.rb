@@ -1,0 +1,1 @@
+default['cloudera'] = "cloudera-server"

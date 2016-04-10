@@ -1,0 +1,10 @@
+name             'cloudera_server'
+maintainer       'Zen Sam'
+maintainer_email 'zensam@ukr.net'
+license          'All rights reserved'
+description      'Installs/Configures cloudera_server'
+long_description 'Installs/Configures cloudera_server'
+version          '0.1.2'
+
+depends 'python'
+depends 'yum'
